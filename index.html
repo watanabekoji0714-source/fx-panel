@@ -78,6 +78,22 @@
   </div>
 
 <script>
+  // 既存インストール向けの補完：formUrl項目の追加前からプロジェクトを使っていた場合、
+  // Fundoraのフォームだけ自動で埋める（他のプロジェクトのデータには触れない）
+  (function backfillFundoraFormUrl() {
+    const FUNDORA_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSefmLDGLfYRskTeB6rA_piFhgitZMQMWjlvVVWqObdLI3G_-Q/viewform?usp=header';
+    let projects = [];
+    try { projects = JSON.parse(localStorage.getItem('tradingProjects') || '[]'); } catch (e) { return; }
+    let changed = false;
+    projects.forEach(p => {
+      if (p.name === 'Fundora マスタープラン' && !p.formUrl) {
+        p.formUrl = FUNDORA_FORM_URL;
+        changed = true;
+      }
+    });
+    if (changed) localStorage.setItem('tradingProjects', JSON.stringify(projects));
+  })();
+
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
