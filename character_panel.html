@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>相棒（トレード習慣キャラクター）</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card-bg: #ffffff; --text: #1f2430; --sub: #6b7280;
+    --green: #2e8b57; --yellow: #d9a441; --red: #d64545; --border: #e5e7eb; --pink: #e88fb0;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; background:var(--bg); color:var(--text); padding:16px; }
+  .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+  h1 { font-size:20px; margin:0; }
+  .status-line { font-size:13px; color:var(--sub); margin-top:2px; }
+  button { background:#2f3e54; color:white; border:none; border-radius:8px; padding:10px 16px; font-size:14px; cursor:pointer; }
+  button.secondary { background:#eef0f3; color:var(--text); }
+
+  .stage-card { background:var(--card-bg); border:1px solid var(--border); border-radius:18px; padding:24px 18px; text-align:center; margin-bottom:16px; position:relative; overflow:hidden; }
+  .cat-wrap { position:relative; width:180px; height:180px; margin:0 auto 10px auto; }
+  .cat-svg { width:100%; height:100%; transition:filter 0.4s ease; }
+  .mood-badge { position:absolute; top:-4px; right:6px; font-size:34px; }
+  .sparkle { position:absolute; inset:0; pointer-events:none; }
+  .sparkle span { position:absolute; font-size:18px; opacity:0; animation:sparkle 1.6s ease-in-out infinite; }
+  @keyframes sparkle { 0%{opacity:0; transform:translateY(6px) scale(0.6);} 40%{opacity:1; transform:translateY(-6px) scale(1);} 100%{opacity:0; transform:translateY(-16px) scale(0.6);} }
+
+  .level-title { font-size:15px; color:var(--sub); margin-top:4px; }
+  .level-num { font-size:24px; font-weight:700; margin:2px 0; }
+  .xp-track { width:100%; max-width:320px; height:14px; background:#eceef1; border-radius:7px; overflow:hidden; margin:12px auto 6px auto; }
+  .xp-fill { height:100%; border-radius:7px; background:linear-gradient(90deg, var(--pink), #f5b8cf); transition:width 0.4s ease; }
+  .xp-sub { font-size:12px; color:var(--sub); }
+  .mood-line { font-size:14px; margin-top:10px; font-weight:600; }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:16px; }
+  .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center; }
+  .stat-card .num { font-size:20px; font-weight:700; }
+  .stat-card .label { font-size:12px; color:var(--sub); margin-top:2px; }
+
+  h2.section-title { font-size:15px; margin:24px 0 10px 0; color:var(--sub); }
+  .history-item { display:flex; align-items:center; gap:10px; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:6px; font-size:13px; }
+  .history-item .icon { font-size:18px; width:24px; text-align:center; }
+  .history-item .meta { color:var(--sub); font-size:12px; }
+  .empty-note { font-size:13px; color:var(--sub); text-align:center; padding:20px; }
+  .source-note { font-size:12px; color:var(--sub); text-align:center; margin-top:4px; }
+  footer { margin-top:20px; font-size:12px; color:var(--sub); text-align:center; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>🐱 相棒</h1>
+      <div class="status-line" id="statusLine">読み込み中...</div>
+    </div>
+    <div><button class="secondary" id="reloadBtn">🔄 リロード</button></div>
+  </div>
+
+  <div class="stage-card">
+    <div class="cat-wrap">
+      <div class="mood-badge" id="moodBadge"></div>
+      <div class="sparkle" id="sparkleLayer"></div>
+      <svg class="cat-svg" id="catSvg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <!-- モデル：グレー×ホワイトの長毛猫（実写真に差し替え可能） -->
+        <!-- 外側の耳（グレー） -->
+        <polygon points="44,66 70,102 36,110" fill="#9aa4b0"/>
+        <polygon points="156,66 130,102 164,110" fill="#9aa4b0"/>
+        <!-- 耳の内側（白いふわふわ） -->
+        <polygon points="50,76 65,99 44,101" fill="#fbfbf9"/>
+        <polygon points="150,76 135,99 156,101" fill="#fbfbf9"/>
+        <!-- 体（肩まわり・グレー） -->
+        <ellipse cx="100" cy="138" rx="64" ry="48" fill="#9aa4b0"/>
+        <!-- 首まわりのふわふわの毛（両脇） -->
+        <path d="M56,128 Q46,140 54,156 Q62,144 68,132 Z" fill="#fbfbf9"/>
+        <path d="M144,128 Q154,140 146,156 Q138,144 132,132 Z" fill="#fbfbf9"/>
+        <!-- 胸元の白い毛 -->
+        <ellipse cx="100" cy="160" rx="30" ry="32" fill="#fbfbf9"/>
+        <!-- 頭部（グレー） -->
+        <ellipse cx="100" cy="110" rx="48" ry="42" fill="#a4adb8"/>
+        <!-- 顔の白いブレーズ（額〜鼻すじ〜あご） -->
+        <path d="M100,76 C113,84 118,100 111,112 C120,121 117,142 100,150 C83,142 80,121 89,112 C82,100 87,84 100,76 Z" fill="#fbfbf9"/>
+        <!-- 目（グリーン） -->
+        <g id="eyes">
+          <ellipse cx="80" cy="106" rx="7.5" ry="8.5" fill="#eef7e6"/>
+          <circle cx="80" cy="107" r="5.6" fill="#93c06f"/>
+          <circle cx="80" cy="108.5" r="2.6" fill="#1c1c1c"/>
+          <circle cx="81.6" cy="104.5" r="1.1" fill="#ffffff"/>
+          <ellipse cx="120" cy="106" rx="7.5" ry="8.5" fill="#eef7e6"/>
+          <circle cx="120" cy="107" r="5.6" fill="#93c06f"/>
+          <circle cx="120" cy="108.5" r="2.6" fill="#1c1c1c"/>
+          <circle cx="121.6" cy="104.5" r="1.1" fill="#ffffff"/>
+        </g>
+        <!-- 鼻・口 -->
+        <path d="M96,116 L104,116 L100,122 Z" fill="#e8a3ae"/>
+        <path id="mouth" d="M92,122 Q100,128 108,122" stroke="#8a7d72" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <!-- ひげ -->
+        <line x1="58" y1="117" x2="82" y2="114" stroke="#c3c8cf" stroke-width="1.5"/>
+        <line x1="58" y1="124" x2="82" y2="122" stroke="#c3c8cf" stroke-width="1.5"/>
+        <line x1="142" y1="117" x2="118" y2="114" stroke="#c3c8cf" stroke-width="1.5"/>
+        <line x1="142" y1="124" x2="118" y2="122" stroke="#c3c8cf" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div class="level-title" id="stageTitle">–</div>
+    <div class="level-num" id="levelNum">Lv. –</div>
+    <div class="xp-track"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+    <div class="xp-sub" id="xpSub">–</div>
+    <div class="mood-line" id="moodLine">–</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="num" id="totalXpNum">–</div><div class="label">通算ポイント</div></div>
+    <div class="stat-card"><div class="num" id="streakNum">–</div><div class="label">満点トレード連続</div></div>
+    <div class="stat-card"><div class="num" id="tradeCountNum">–</div><div class="label">集計対象トレード数</div></div>
+  </div>
+
+  <h2 class="section-title">最近の記録</h2>
+  <div id="historyList"></div>
+  <div class="source-note" id="sourceNote"></div>
+
+  <footer>ポイントは損益ではなく「ルール遵守数」から計算しています。全プロジェクト共通の相棒です。</footer>
+
+<script>
+// ================= プロジェクト管理（共通仕様・読み取りのみ使用） =================
+const PROJECTS_KEY = 'tradingProjects';
+
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch (e) { return []; }
+}
+
+// ================= 汎用ユーティリティ =================
+function toNumber(v) {
+  if (v == null) return NaN;
+  const cleaned = String(v).replace(/[¥,%\s]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+function parseDateInfo(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const gv = s.match(/^Date\((\d+),(\d+),(\d+)/);
+  if (gv) return { date: new Date(parseInt(gv[1]), parseInt(gv[2]), parseInt(gv[3])) };
+  const dm = s.match(/^(\d{1,2})[\/\-月](\d{1,2})/);
+  if (dm) { const now = new Date(); return { date: new Date(now.getFullYear(), parseInt(dm[1], 10) - 1, parseInt(dm[2], 10)) }; }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return { date: new Date(d.getFullYear(), d.getMonth(), d.getDate()) };
+  return null;
+}
+function parseSheetUrl(input) {
+  const idMatch = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = input.match(/[?#&]gid=(\d+)/);
+  if (!idMatch) return null;
+  return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
+}
+function loadViaJSONP(sheetId, gid) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gvizCallback_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    let done = false;
+    const script = document.createElement('script');
+    function cleanup() { delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cbName] = function (response) {
+      if (done) return; done = true; cleanup();
+      try {
+        if (!response || !response.table || !response.table.rows) { reject(new Error('形式エラー')); return; }
+        const rows = response.table.rows.map(r => (r.c || []).map(cell => {
+          if (!cell) return '';
+          if (cell.f !== undefined && cell.f !== null) return cell.f;
+          if (cell.v !== undefined && cell.v !== null) return cell.v;
+          return '';
+        }));
+        resolve(rows);
+      } catch (e) { reject(e); }
+    };
+    const timer = setTimeout(() => { if (done) return; done = true; cleanup(); reject(new Error('タイムアウト')); }, 12000);
+    script.onerror = function () { if (done) return; done = true; cleanup(); reject(new Error('読み込み失敗')); };
+    script.src = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/gviz/tq?gid=' + gid + '&tqx=responseHandler:' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+const COL = { date: 0, pair: 1, ruleCount: 18, lossType: 22 };
+const MAX_RULE_COUNT = 7;
+
+function makeDemoRow(date, pair, ruleCount, lossType) {
+  const r = new Array(24).fill('');
+  r[COL.date] = date;
+  r[COL.pair] = pair;
+  r[COL.ruleCount] = ruleCount;
+  if (lossType) r[COL.lossType] = lossType;
+  return r;
+}
+const DEMO_ROWS = [
+  { project: 'サンプル', r: makeDemoRow('7/14', 'XAUUSD', 7) },
+  { project: 'サンプル', r: makeDemoRow('7/15', 'XAUUSD', 6) },
+  { project: 'サンプル', r: makeDemoRow('7/16', 'XAUUSD', 3, 'タイプB') },
+  { project: 'サンプル', r: makeDemoRow('7/18', 'XAUUSD', 7) },
+];
+
+// ================= 育成ロジック =================
+const LEVEL_XP = 50; // 1レベルに必要なポイント
+
+function stageTitleFor(level) {
+  if (level >= 15) return '伝説の相棒';
+  if (level >= 10) return 'ベテラン相棒';
+  if (level >= 6) return '頼れる相棒';
+  if (level >= 3) return 'がんばり屋の相棒';
+  return '見習いの相棒';
+}
+
+function computeStreak(sortedRows) {
+  // sortedRows: 日付昇順。末尾から遡って満点(MAX_RULE_COUNT)が何回連続しているか
+  let streak = 0;
+  for (let i = sortedRows.length - 1; i >= 0; i--) {
+    if (sortedRows[i].ruleCount === MAX_RULE_COUNT) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// ================= メイン =================
+async function loadData() {
+  const statusLine = document.getElementById('statusLine');
+  const projects = loadProjects().filter(p => p.sheetUrl);
+  const sourceNote = document.getElementById('sourceNote');
+
+  if (!projects.length) {
+    statusLine.textContent = 'プロジェクト未設定のためサンプルデータ表示中';
+    sourceNote.textContent = '（プロジェクト管理でスプレッドシートURLを登録すると実データに切り替わります）';
+    render(DEMO_ROWS);
+    return;
+  }
+
+  statusLine.textContent = '全プロジェクトのデータを集計中...';
+  const results = await Promise.allSettled(projects.map(async (p) => {
+    const parsed = parseSheetUrl(p.sheetUrl);
+    if (!parsed) throw new Error('URL形式エラー');
+    const raw = await loadViaJSONP(parsed.id, parsed.gid);
+    const rows = raw.filter((r, i) => !(i === 0 && /日付/.test(String(r[0] || ''))));
+    return rows.filter(r => r[COL.date]).map(r => ({ project: p.name, r }));
+  }));
+
+  let combined = [];
+  let okCount = 0;
+  const failedNames = [];
+  results.forEach((res, i) => {
+    if (res.status === 'fulfilled') { combined = combined.concat(res.value); okCount++; }
+    else failedNames.push(projects[i].name);
+  });
+
+  if (!combined.length) {
+    statusLine.textContent = '実データを取得できなかったためサンプルデータ表示中';
+    sourceNote.textContent = failedNames.length ? `取得失敗: ${failedNames.join('、')}` : '';
+    render(DEMO_ROWS);
+    return;
+  }
+
+  statusLine.textContent = `${okCount}件のプロジェクトから集計 最終更新: ${new Date().toLocaleString('ja-JP')}`;
+  sourceNote.textContent = failedNames.length ? `一部取得失敗: ${failedNames.join('、')}` : `集計対象: ${projects.filter(p=>!failedNames.includes(p.name)).map(p=>p.name).join('、')}`;
+  render(combined);
+}
+
+function render(combined) {
+  const parsed = combined.map(x => {
+    const ruleCount = toNumber(x.r[COL.ruleCount]);
+    const lossType = (x.r[COL.lossType] || '').trim();
+    const dInfo = parseDateInfo(x.r[COL.date]);
+    return { project: x.project, pair: x.r[COL.pair], ruleCount: isNaN(ruleCount) ? null : ruleCount, lossType, dInfo };
+  }).filter(x => x.ruleCount !== null && x.dInfo);
+
+  parsed.sort((a, b) => a.dInfo.date - b.dInfo.date);
+
+  const totalXp = parsed.reduce((s, x) => s + x.ruleCount, 0);
+  const level = Math.max(1, Math.floor(totalXp / LEVEL_XP) + 1);
+  const xpInLevel = totalXp % LEVEL_XP;
+  const xpRatio = xpInLevel / LEVEL_XP;
+
+  document.getElementById('levelNum').textContent = `Lv. ${level}`;
+  document.getElementById('stageTitle').textContent = stageTitleFor(level);
+  document.getElementById('xpFill').style.width = `${Math.max(2, xpRatio * 100)}%`;
+  document.getElementById('xpSub').textContent = `${xpInLevel} / ${LEVEL_XP} pt（次のレベルまで ${LEVEL_XP - xpInLevel}pt）`;
+  document.getElementById('totalXpNum').textContent = `${totalXp}pt`;
+  document.getElementById('tradeCountNum').textContent = `${parsed.length}件`;
+
+  const streak = computeStreak(parsed);
+  document.getElementById('streakNum').textContent = `${streak}件`;
+
+  const latest = parsed[parsed.length - 1];
+  const moodBadge = document.getElementById('moodBadge');
+  const moodLine = document.getElementById('moodLine');
+  const eyes = document.getElementById('eyes');
+  const mouth = document.getElementById('mouth');
+  const catSvg = document.getElementById('catSvg');
+  const sparkleLayer = document.getElementById('sparkleLayer');
+  sparkleLayer.innerHTML = '';
+  catSvg.style.filter = 'none';
+
+  if (!latest) {
+    moodBadge.textContent = '';
+    moodLine.textContent = 'まだ記録がありません。';
+  } else if (latest.lossType === 'タイプB') {
+    moodBadge.textContent = '😿';
+    moodLine.textContent = 'しょんぼり中…次に良いトレードを記録すると立ち直ります。';
+    mouth.setAttribute('d', 'M92,126 Q100,118 108,126');
+    catSvg.style.filter = 'saturate(0.55) brightness(0.92)';
+  } else if (latest.ruleCount === MAX_RULE_COUNT) {
+    moodBadge.textContent = '✨';
+    moodLine.textContent = '絶好調！ルール通りの完璧なトレードでした。';
+    mouth.setAttribute('d', 'M90,120 Q100,132 110,120');
+    sparkleLayer.innerHTML = '<span style="left:20%;top:10%;animation-delay:0s;">✨</span><span style="left:70%;top:15%;animation-delay:0.4s;">✨</span><span style="left:45%;top:5%;animation-delay:0.8s;">⭐</span>';
+  } else {
+    moodBadge.textContent = '🐾';
+    moodLine.textContent = 'いい調子。この習慣を続けていきましょう。';
+    mouth.setAttribute('d', 'M92,122 Q100,128 108,122');
+  }
+
+  const historyList = document.getElementById('historyList');
+  const recent = parsed.slice(-5).reverse();
+  if (!recent.length) {
+    historyList.innerHTML = '<div class="empty-note">記録がまだありません。</div>';
+  } else {
+    historyList.innerHTML = recent.map(x => {
+      const icon = x.lossType === 'タイプB' ? '😿' : x.ruleCount === MAX_RULE_COUNT ? '✨' : '🐾';
+      const dateStr = `${x.dInfo.date.getMonth() + 1}/${x.dInfo.date.getDate()}`;
+      return `<div class="history-item"><span class="icon">${icon}</span><div><div>${dateStr}　${escapeHtml(x.project)}　${escapeHtml(String(x.pair || ''))}</div><div class="meta">ルール遵守 ${x.ruleCount}/${MAX_RULE_COUNT}　+${x.ruleCount}pt</div></div></div>`;
+    }).join('');
+  }
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('reloadBtn').addEventListener('click', loadData);
+  loadData();
+});
+</script>
+</body>
+</html>

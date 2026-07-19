@@ -7,6 +7,7 @@ const APP_SHELL = [
   './index.html',
   './risk_panel.html',
   './analysis_panel.html',
+  './character_panel.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
