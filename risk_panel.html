@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>リスク管理パネル</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card-bg: #ffffff; --text: #1f2430; --sub: #6b7280;
+    --green: #2e8b57; --yellow: #d9a441; --red: #d64545; --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; background:var(--bg); color:var(--text); padding:16px; }
+  .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+  h1 { font-size:20px; margin:0; }
+  .status-line { font-size:13px; color:var(--sub); margin-top:2px; }
+  button { background:#2f3e54; color:white; border:none; border-radius:8px; padding:10px 16px; font-size:14px; cursor:pointer; }
+  button:hover { opacity:0.9; }
+  button.secondary { background:#eef0f3; color:var(--text); }
+  button.danger { background:#f6dede; color:#8a1f1f; }
+  .project-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .project-bar label { font-size:13px; color:var(--sub); }
+  .project-bar select { padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; min-width:180px; }
+  .settings { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .settings summary { cursor:pointer; font-weight:600; }
+  .settings-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:12px; }
+  .settings-grid label { display:block; font-size:12px; color:var(--sub); margin-bottom:4px; }
+  .settings-grid input { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+  .proj-list-item { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:14px; }
+  .proj-list-item .name { font-weight:600; }
+  .proj-list-item .actions { display:flex; gap:6px; }
+  .proj-list-item .actions button { padding:6px 10px; font-size:12px; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .hint { font-size:12px; color:var(--sub); margin-top:6px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
+  .card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:18px; }
+  .card h2 { font-size:15px; margin:0 0 4px 0; color:var(--sub); font-weight:600; }
+  .card .big { font-size:26px; font-weight:700; margin:4px 0; }
+  .card .sub { font-size:13px; color:var(--sub); }
+  .gauge-track { width:100%; height:14px; background:#eceef1; border-radius:7px; overflow:hidden; margin:10px 0 6px 0; }
+  .gauge-fill { height:100%; border-radius:7px; transition:width 0.3s ease; }
+  .alert-banner { background:#fdeaea; border:1px solid var(--red); color:#8a1f1f; padding:14px 16px; border-radius:12px; margin-bottom:16px; font-weight:600; display:none; }
+  .demo-banner { background:#fff8e6; border:1px solid #e8c56a; color:#7a5b12; padding:10px 14px; border-radius:10px; margin-bottom:16px; font-size:13px; display:none; line-height:1.6; }
+  .demo-banner code { background:#fff0c2; padding:1px 5px; border-radius:4px; }
+  .empty-banner { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; padding:14px 16px; border-radius:10px; margin-bottom:16px; font-size:14px; display:none; }
+  footer { margin-top:20px; font-size:12px; color:var(--sub); text-align:center; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>🎯 リスク管理パネル</h1>
+      <div class="status-line" id="statusLine">読み込み中...</div>
+    </div>
+    <div><button class="secondary" id="reloadBtn">🔄 リロード</button></div>
+  </div>
+
+  <div class="project-bar">
+    <label for="projectSelect">プロジェクト:</label>
+    <select id="projectSelect"></select>
+  </div>
+
+  <div class="empty-banner" id="emptyBanner">
+    プロジェクトがまだありません。下の「🗂️ プロジェクト管理」から追加してください。
+  </div>
+
+  <details class="settings" id="projectManagerDetails">
+    <summary>🗂️ プロジェクト管理（追加・編集・削除）</summary>
+    <div id="projectList"></div>
+    <div class="settings-grid">
+      <div><label>プロジェクト名</label><input type="text" id="pName" placeholder="例：Fundora マスタープラン"></div>
+      <div><label>スプレッドシートURL</label><input type="text" id="pUrl" placeholder="https://docs.google.com/spreadsheets/d/xxxx/edit?gid=xxxx"></div>
+      <div><label>初期資金（円）</label><input type="text" inputmode="numeric" id="pInitialCapital" value="60,000,000"></div>
+      <div><label>最大DD上限（円）</label><input type="text" inputmode="numeric" id="pMaxDD" value="6,000,000"></div>
+      <div><label>日次損失上限（％）</label><input type="number" id="pDailyLimitPct" value="5"></div>
+      <div><label>目標（％）</label><input type="number" id="pTargetPct" value="8"></div>
+    </div>
+    <div class="hint">「リンクを知っている全員が閲覧可」に設定したスプレッドシートのURLを貼ってください。</div>
+    <div class="row">
+      <button id="saveProjectBtn">保存</button>
+      <button class="secondary" id="newProjectBtn">＋ 新規作成にする</button>
+      <button class="danger" id="deleteProjectBtn">このプロジェクトを削除</button>
+    </div>
+  </details>
+
+  <div class="alert-banner" id="alertBanner">
+    ⚠️ 2連敗しています。本日のトレードは終了してください。
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>① DD使用状況</h2>
+      <div class="big" id="ddBig">–</div>
+      <div class="gauge-track"><div class="gauge-fill" id="ddGauge" style="width:0%"></div></div>
+      <div class="sub" id="ddSub">–</div>
+    </div>
+    <div class="card">
+      <h2>② 本日の日次損失</h2>
+      <div class="big" id="dailyBig">–</div>
+      <div class="gauge-track"><div class="gauge-fill" id="dailyGauge" style="width:0%"></div></div>
+      <div class="sub" id="dailySub">–</div>
+    </div>
+    <div class="card">
+      <h2>③ 直近連敗カウンター</h2>
+      <div class="big" id="streakBig">–</div>
+      <div class="sub" id="streakSub">–</div>
+    </div>
+    <div class="card">
+      <h2>④ 目標進捗</h2>
+      <div class="big" id="stepBig">–</div>
+      <div class="gauge-track"><div class="gauge-fill" id="stepGauge" style="width:0%"></div></div>
+      <div class="sub" id="stepSub">–</div>
+    </div>
+  </div>
+
+  <footer>個人利用向けの読み取り専用パネルです。データはGoogleスプレッドシートから取得します。</footer>
+
+<script>
+// ================= プロジェクト管理（risk_panel / analysis_panel 共通仕様） =================
+const PROJECTS_KEY = 'tradingProjects';
+const ACTIVE_PROJECT_KEY = 'tradingActiveProjectId';
+
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveProjects(list) { localStorage.setItem(PROJECTS_KEY, JSON.stringify(list)); }
+function getActiveProjectId() { return localStorage.getItem(ACTIVE_PROJECT_KEY) || ''; }
+function setActiveProjectId(id) { localStorage.setItem(ACTIVE_PROJECT_KEY, id); }
+function newProjectId() { return 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000); }
+function getProjectById(id) { return loadProjects().find(p => p.id === id) || null; }
+
+// 旧バージョン（プロジェクト機能追加前）の設定をFundoraプロジェクトとして移行し、
+// 他口座の空プロジェクトも合わせて用意する
+function migrateLegacyIfNeeded() {
+  let projects = loadProjects();
+  if (projects.length) return projects;
+
+  // GitHub Pages等の新しいオリジンで開いた初回は旧設定が存在しないため、
+  // 動作確認済みのFundoraシートURLをデフォルトとして使う（プロジェクト管理画面からいつでも変更可）
+  const FUNDORA_DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/1dqL306EB8rI-RUZj6xWIQnkFRlS8_9syV5G_PMyG_h8/edit?gid=980747558#gid=980747558';
+  const legacyUrl = localStorage.getItem('riskPanelSheetUrl') || localStorage.getItem('riskPanelCsvUrl') || FUNDORA_DEFAULT_URL;
+  const legacySettings = JSON.parse(localStorage.getItem('riskPanelSettings') || '{}');
+
+  const toNum = (v, def) => { const n = Number(String(v || '').replace(/,/g, '')); return isNaN(n) || !n ? def : n; };
+
+  projects = [
+    {
+      id: newProjectId(), name: 'Fundora マスタープラン', sheetUrl: legacyUrl,
+      initialCapital: toNum(legacySettings.initialCapital, 60000000),
+      maxDD: toNum(legacySettings.maxDD, 6000000),
+      dailyLimitPct: toNum(legacySettings.dailyLimitPct, 5),
+      targetPct: toNum(legacySettings.step1TargetPct, 8),
+      tzOffsetHours: 0,
+    },
+    { id: newProjectId(), name: 'Fintokei トレード大会', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'Fintokei クオーツプラン', sheetUrl: '', initialCapital: 1000000, maxDD: 100000, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'HFM ハイレバ', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 10, targetPct: 0, tzOffsetHours: 0 },
+  ];
+  saveProjects(projects);
+  setActiveProjectId(projects[0].id);
+  return projects;
+}
+
+function refreshProjectSelect() {
+  const projects = loadProjects();
+  const sel = document.getElementById('projectSelect');
+  const active = getActiveProjectId();
+  sel.innerHTML = projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.sheetUrl ? '' : '（未設定）'}</option>`).join('');
+  if (projects.find(p => p.id === active)) sel.value = active;
+  else if (projects.length) { sel.value = projects[0].id; setActiveProjectId(projects[0].id); }
+  document.getElementById('emptyBanner').style.display = projects.length ? 'none' : 'block';
+}
+
+function refreshProjectList() {
+  const projects = loadProjects();
+  const active = getActiveProjectId();
+  const listEl = document.getElementById('projectList');
+  listEl.innerHTML = projects.map(p => `
+    <div class="proj-list-item">
+      <span class="name">${p.id === active ? '✅ ' : ''}${escapeHtml(p.name)}${p.sheetUrl ? '' : '（URL未設定）'}</span>
+      <span class="actions">
+        <button class="secondary" data-action="select" data-id="${p.id}">選択</button>
+        <button class="secondary" data-action="edit" data-id="${p.id}">編集</button>
+      </span>
+    </div>`).join('');
+  listEl.querySelectorAll('button[data-action="select"]').forEach(btn => {
+    btn.addEventListener('click', () => { setActiveProjectId(btn.dataset.id); refreshProjectSelect(); refreshProjectList(); loadData(); });
+  });
+  listEl.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+    btn.addEventListener('click', () => loadProjectIntoForm(btn.dataset.id));
+  });
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function loadProjectIntoForm(id) {
+  const p = getProjectById(id);
+  if (!p) return;
+  document.getElementById('projectManagerDetails').open = true;
+  document.getElementById('pName').dataset.editingId = id;
+  document.getElementById('pName').value = p.name;
+  document.getElementById('pUrl').value = p.sheetUrl || '';
+  document.getElementById('pInitialCapital').value = Number(p.initialCapital || 0).toLocaleString('en-US');
+  document.getElementById('pMaxDD').value = Number(p.maxDD || 0).toLocaleString('en-US');
+  document.getElementById('pDailyLimitPct').value = p.dailyLimitPct;
+  document.getElementById('pTargetPct').value = p.targetPct;
+}
+
+function clearForm() {
+  document.getElementById('pName').dataset.editingId = '';
+  document.getElementById('pName').value = '';
+  document.getElementById('pUrl').value = '';
+  document.getElementById('pInitialCapital').value = '0';
+  document.getElementById('pMaxDD').value = '0';
+  document.getElementById('pDailyLimitPct').value = '5';
+  document.getElementById('pTargetPct').value = '8';
+}
+
+function formatCommaInput(el) {
+  const digits = el.value.replace(/[^\d]/g, '');
+  el.value = digits ? Number(digits).toLocaleString('en-US') : '';
+}
+
+// ================= 汎用ユーティリティ =================
+function toNumber(v) {
+  if (v == null) return NaN;
+  const cleaned = String(v).replace(/[¥,%\s]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+function parseDate(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const gv = s.match(/^Date\((\d+),(\d+),(\d+)/);
+  if (gv) return dateOnly(new Date(parseInt(gv[1]), parseInt(gv[2]), parseInt(gv[3])));
+  let d = new Date(s);
+  if (!isNaN(d.getTime()) && /\d{4}/.test(s)) return dateOnly(d);
+  const m = s.match(/^(\d{1,2})[\/\-月](\d{1,2})/);
+  if (m) { const now = new Date(); d = new Date(now.getFullYear(), parseInt(m[1], 10) - 1, parseInt(m[2], 10)); return dateOnly(d); }
+  return null;
+}
+function dateOnly(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function sameDate(a, b) { return a && b && a.getTime() === b.getTime(); }
+function parseSheetUrl(input) {
+  const idMatch = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = input.match(/[?#&]gid=(\d+)/);
+  if (!idMatch) return null;
+  return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
+}
+function loadViaJSONP(sheetId, gid) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gvizCallback_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    let done = false;
+    const script = document.createElement('script');
+    function cleanup() { delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cbName] = function (response) {
+      if (done) return; done = true; cleanup();
+      try {
+        if (!response || !response.table || !response.table.rows) { reject(new Error('シートのデータ形式を読み取れませんでした')); return; }
+        const rows = response.table.rows.map(r => (r.c || []).map(cell => {
+          if (!cell) return '';
+          if (cell.f !== undefined && cell.f !== null) return cell.f;
+          if (cell.v !== undefined && cell.v !== null) return cell.v;
+          return '';
+        }));
+        resolve(rows);
+      } catch (e) { reject(e); }
+    };
+    const timer = setTimeout(() => { if (done) return; done = true; cleanup(); reject(new Error('タイムアウトしました（共有設定を確認してください）')); }, 12000);
+    script.onerror = function () { if (done) return; done = true; cleanup(); reject(new Error('スクリプトの読み込みに失敗しました')); };
+    script.src = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/gviz/tq?gid=' + gid + '&tqx=responseHandler:' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+const COL = { date:0, pair:1, side:2, result:3, pnl:4, cum:5, balance:6, pnlRate:7 };
+
+const DEMO_ROWS = [
+  ["7/15","XAUUSD","SELL","○","853287","","58708351",""],
+  ["7/15","XAUUSD","SELL","×","-199763","","58508588",""],
+  ["7/18","XAUUSD","SELL","○","586158","","59094746",""],
+];
+
+// ================= メイン処理 =================
+async function loadData() {
+  const projects = loadProjects();
+  const active = getProjectById(getActiveProjectId());
+  const statusLine = document.getElementById('statusLine');
+
+  if (!active) {
+    document.getElementById('alertBanner').style.display = 'none';
+    statusLine.textContent = 'プロジェクト未選択';
+    return;
+  }
+  statusLine.textContent = active.name + ' を読み込み中...';
+
+  let rows;
+  if (!active.sheetUrl) {
+    rows = DEMO_ROWS;
+    statusLine.textContent = active.name + '：URL未設定のためサンプルデータ表示中';
+  } else {
+    const parsed = parseSheetUrl(active.sheetUrl);
+    if (!parsed) {
+      rows = DEMO_ROWS;
+      statusLine.textContent = 'URL形式エラー / サンプルデータ表示中';
+    } else {
+      try {
+        const raw = await loadViaJSONP(parsed.id, parsed.gid);
+        rows = raw.filter((r, i) => !(i === 0 && /日付/.test(String(r[0] || ''))));
+        rows = rows.filter(r => r[COL.date] && r[COL.balance]);
+        if (!rows.length) throw new Error('データ行が見つかりませんでした');
+        statusLine.textContent = active.name + ' 最終更新: ' + new Date().toLocaleString('ja-JP');
+      } catch (e) {
+        rows = DEMO_ROWS;
+        statusLine.textContent = active.name + '：取得エラー（' + (e && e.message ? e.message : e) + '）/ サンプルデータ表示中';
+      }
+    }
+  }
+  render(rows, active);
+}
+
+function render(rows, project) {
+  if (!rows.length) return;
+  const initialCapital = Number(project.initialCapital) || 60000000;
+  const maxDD = Number(project.maxDD) || 6000000;
+  const dailyLimitPct = (Number(project.dailyLimitPct) || 5) / 100;
+  const targetPct = (Number(project.targetPct) || 8) / 100;
+
+  const last = rows[rows.length - 1];
+  const currentBalance = toNumber(last[COL.balance]);
+
+  const ddUsed = Math.max(0, initialCapital - currentBalance);
+  const ddRatio = maxDD > 0 ? Math.min(1, ddUsed / maxDD) : 0;
+  setGauge('ddGauge', ddRatio, ddRatio >= 0.9 ? 'red' : ddRatio >= 0.7 ? 'yellow' : 'green');
+  document.getElementById('ddBig').textContent = `¥${Math.round(ddUsed).toLocaleString()} / ¥${maxDD.toLocaleString()}`;
+  document.getElementById('ddSub').textContent = `使用率 ${(ddRatio * 100).toFixed(1)}%（残り ¥${Math.round(maxDD - ddUsed).toLocaleString()}）`;
+
+  const dated = rows.map(r => ({ row: r, d: parseDate(r[COL.date]), pnl: toNumber(r[COL.pnl]), balance: toNumber(r[COL.balance]) })).filter(x => x.d);
+  const todayDate = dated.length ? dated[dated.length - 1].d : null;
+  const todayRows = dated.filter(x => sameDate(x.d, todayDate));
+  const priorRows = dated.filter(x => !sameDate(x.d, todayDate));
+  const startOfDayBalance = priorRows.length ? priorRows[priorRows.length - 1].balance
+                            : (todayRows.length ? todayRows[0].balance - todayRows[0].pnl : currentBalance);
+
+  const todayLossSum = todayRows.filter(x => x.pnl < 0).reduce((s, x) => s + Math.abs(x.pnl), 0);
+  const dailyLimit = startOfDayBalance * dailyLimitPct;
+  const dailyRatio = dailyLimit > 0 ? Math.min(1, todayLossSum / dailyLimit) : 0;
+  setGauge('dailyGauge', dailyRatio, dailyRatio >= 0.9 ? 'red' : dailyRatio >= 0.6 ? 'yellow' : 'green');
+  document.getElementById('dailyBig').textContent = `¥${Math.round(todayLossSum).toLocaleString()} / ¥${Math.round(dailyLimit).toLocaleString()}`;
+  document.getElementById('dailySub').textContent = `使用率 ${(dailyRatio * 100).toFixed(1)}%（本日の開始残高: ¥${Math.round(startOfDayBalance).toLocaleString()}）`;
+
+  let streak = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const res = (rows[i][COL.result] || '').trim();
+    if (res === '×') streak++; else if (res === '○') break;
+  }
+  document.getElementById('streakBig').textContent = `${streak}連敗`;
+  const alertBanner = document.getElementById('alertBanner');
+  if (streak >= 2) {
+    document.getElementById('streakSub').textContent = '本日のトレードは終了してください。';
+    alertBanner.style.display = 'block';
+  } else {
+    document.getElementById('streakSub').textContent = streak === 1 ? '次に負けたら本日終了ラインです。' : '連敗なし。';
+    alertBanner.style.display = 'none';
+  }
+
+  const pnlRate = (currentBalance - initialCapital) / initialCapital;
+  const stepRatio = targetPct > 0 ? Math.max(0, Math.min(1, pnlRate / targetPct)) : 0;
+  setGauge('stepGauge', stepRatio, pnlRate < 0 ? 'red' : stepRatio >= 1 ? 'green' : 'yellow');
+  document.getElementById('stepBig').textContent = targetPct > 0 ? `${(pnlRate * 100).toFixed(2)}% / +${(targetPct * 100).toFixed(0)}%` : `${(pnlRate * 100).toFixed(2)}%`;
+  document.getElementById('stepSub').textContent = targetPct > 0
+    ? (pnlRate >= targetPct ? '🎉 目標達成！' : `達成まであと ${((targetPct - pnlRate) * 100).toFixed(2)}pt`)
+    : '目標未設定';
+}
+
+function setGauge(id, ratio, color) {
+  const el = document.getElementById(id);
+  const colors = { green: '#2e8b57', yellow: '#d9a441', red: '#d64545' };
+  el.style.width = `${Math.max(2, ratio * 100)}%`;
+  el.style.background = colors[color] || colors.green;
+}
+
+// ================= 初期化 =================
+window.addEventListener('DOMContentLoaded', () => {
+  migrateLegacyIfNeeded();
+  refreshProjectSelect();
+  refreshProjectList();
+
+  document.getElementById('projectSelect').addEventListener('change', (e) => {
+    setActiveProjectId(e.target.value);
+    refreshProjectList();
+    loadData();
+  });
+
+  ['pInitialCapital', 'pMaxDD'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('blur', () => formatCommaInput(el));
+  });
+
+  document.getElementById('newProjectBtn').addEventListener('click', () => {
+    clearForm();
+    document.getElementById('projectManagerDetails').open = true;
+  });
+
+  document.getElementById('saveProjectBtn').addEventListener('click', () => {
+    formatCommaInput(document.getElementById('pInitialCapital'));
+    formatCommaInput(document.getElementById('pMaxDD'));
+    const editingId = document.getElementById('pName').dataset.editingId;
+    const name = document.getElementById('pName').value.trim();
+    if (!name) { alert('プロジェクト名を入力してください'); return; }
+    const projects = loadProjects();
+    const data = {
+      name,
+      sheetUrl: document.getElementById('pUrl').value.trim(),
+      initialCapital: toNumber(document.getElementById('pInitialCapital').value) || 0,
+      maxDD: toNumber(document.getElementById('pMaxDD').value) || 0,
+      dailyLimitPct: toNumber(document.getElementById('pDailyLimitPct').value) || 5,
+      targetPct: toNumber(document.getElementById('pTargetPct').value) || 0,
+    };
+    let id = editingId;
+    if (id && projects.find(p => p.id === id)) {
+      const idx = projects.findIndex(p => p.id === id);
+      projects[idx] = { ...projects[idx], ...data };
+    } else {
+      id = newProjectId();
+      projects.push({ id, tzOffsetHours: 0, ...data });
+    }
+    saveProjects(projects);
+    setActiveProjectId(id);
+    document.getElementById('pName').dataset.editingId = id;
+    refreshProjectSelect();
+    refreshProjectList();
+    loadData();
+  });
+
+  document.getElementById('deleteProjectBtn').addEventListener('click', () => {
+    const editingId = document.getElementById('pName').dataset.editingId;
+    if (!editingId) { alert('削除するプロジェクトを一覧から「編集」で選んでください'); return; }
+    if (!confirm('このプロジェクトを削除しますか？（スプレッドシート自体は削除されません）')) return;
+    let projects = loadProjects().filter(p => p.id !== editingId);
+    saveProjects(projects);
+    if (getActiveProjectId() === editingId) setActiveProjectId(projects.length ? projects[0].id : '');
+    clearForm();
+    refreshProjectSelect();
+    refreshProjectList();
+    loadData();
+  });
+
+  document.getElementById('reloadBtn').addEventListener('click', loadData);
+  loadData();
+});
+</script>
+</body>
+</html>

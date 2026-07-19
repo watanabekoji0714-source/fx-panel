@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>パフォーマンス分析ダッシュボード</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card-bg: #ffffff; --text: #1f2430; --sub: #6b7280;
+    --green: #2e8b57; --yellow: #d9a441; --red: #d64545; --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; background:var(--bg); color:var(--text); padding:16px; }
+  .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+  h1 { font-size:20px; margin:0; }
+  h2.section-title { font-size:16px; margin:28px 0 10px 0; }
+  .status-line { font-size:13px; color:var(--sub); margin-top:2px; }
+  button { background:#2f3e54; color:white; border:none; border-radius:8px; padding:10px 16px; font-size:14px; cursor:pointer; }
+  button.secondary { background:#eef0f3; color:var(--text); }
+  button.danger { background:#f6dede; color:#8a1f1f; }
+  .project-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .project-bar label { font-size:13px; color:var(--sub); }
+  .project-bar select { padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; min-width:180px; }
+  .settings { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .settings summary { cursor:pointer; font-weight:600; }
+  .settings-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:12px; }
+  .settings-grid label { display:block; font-size:12px; color:var(--sub); margin-bottom:4px; }
+  .settings-grid input { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+  .proj-list-item { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:14px; }
+  .proj-list-item .name { font-weight:600; }
+  .proj-list-item .actions { display:flex; gap:6px; }
+  .proj-list-item .actions button { padding:6px 10px; font-size:12px; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .hint { font-size:12px; color:var(--sub); margin-top:6px; }
+  .empty-banner { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; padding:14px 16px; border-radius:10px; margin-bottom:16px; font-size:14px; display:none; }
+  .filter-bar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .filter-bar label { font-size:13px; color:var(--sub); }
+  .filter-bar select { padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:var(--card-bg); color:var(--text); }
+  table { width:100%; border-collapse:collapse; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; font-size:14px; }
+  th, td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); }
+  th:first-child, td:first-child { text-align:left; }
+  thead th { background:#2f3e54; color:white; font-weight:600; }
+  tbody tr:nth-child(even) { background:#f8f9fb; }
+  .pf-pos { color: var(--green); font-weight:600; }
+  .pf-neg { color: var(--red); font-weight:600; }
+  .table-wrap { overflow-x:auto; }
+  .note { font-size:12px; color:var(--sub); margin-top:8px; }
+  footer { margin-top:24px; font-size:12px; color:var(--sub); text-align:center; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>📊 パフォーマンス分析ダッシュボード（Phase2）</h1>
+      <div class="status-line" id="statusLine">読み込み中...</div>
+    </div>
+    <div><button class="secondary" id="reloadBtn">🔄 リロード</button></div>
+  </div>
+
+  <div class="project-bar">
+    <label for="projectSelect">プロジェクト:</label>
+    <select id="projectSelect"></select>
+  </div>
+
+  <div class="empty-banner" id="emptyBanner">
+    プロジェクトがまだありません。下の「🗂️ プロジェクト管理」から追加してください（リスク管理パネルで作成したプロジェクトはここにも自動で表示されます）。
+  </div>
+
+  <details class="settings" id="projectManagerDetails">
+    <summary>🗂️ プロジェクト管理（追加・編集・削除）</summary>
+    <div id="projectList"></div>
+    <div class="settings-grid">
+      <div><label>プロジェクト名</label><input type="text" id="pName" placeholder="例：Fundora マスタープラン"></div>
+      <div><label>スプレッドシートURL</label><input type="text" id="pUrl" placeholder="https://docs.google.com/spreadsheets/d/xxxx/edit?gid=xxxx"></div>
+      <div><label>時刻タイムゾーン補正（時間、JST基準。例：サーバーがGMT+2ならJSTまで+7）</label><input type="number" id="pTzOffset" value="0"></div>
+    </div>
+    <div class="hint">初期資金・DD上限などのリスク設定は「リスク管理パネル」側で編集してください（同じプロジェクト一覧を共有しています）。</div>
+    <div class="row">
+      <button id="saveProjectBtn">保存</button>
+      <button class="secondary" id="newProjectBtn">＋ 新規作成にする</button>
+      <button class="danger" id="deleteProjectBtn">このプロジェクトを削除</button>
+    </div>
+  </details>
+
+  <h2 class="section-title">通貨ペア別成績（全期間・フィルタの影響を受けません）</h2>
+  <div class="table-wrap"><table id="pairTable"><thead><tr><th>通貨ペア</th><th>総数</th><th>勝ち</th><th>負け</th><th>勝率</th><th>PF</th><th>期待値</th></tr></thead><tbody></tbody></table></div>
+
+  <div class="filter-bar">
+    <label for="pairFilter">↓ 以下のセクションを通貨ペアで絞り込み：</label>
+    <select id="pairFilter"><option value="all">すべての通貨ペア</option></select>
+  </div>
+
+  <h2 class="section-title">月別成績（左の通貨ペア絞り込みが反映されます）</h2>
+  <div class="table-wrap"><table id="monthTable"><thead><tr><th>月</th><th>総数</th><th>勝ち</th><th>負け</th><th>勝率</th><th>PF</th><th>期待値</th></tr></thead><tbody></tbody></table></div>
+
+  <div class="filter-bar">
+    <label for="monthFilter">↓ 以下のセクションを月で絞り込み：</label>
+    <select id="monthFilter"><option value="all">すべての月</option></select>
+  </div>
+
+  <h2 class="section-title">時間帯別成績（通貨ペア・月の絞り込みが反映されます）</h2>
+  <div class="table-wrap"><table id="timeTable"><thead><tr><th>時間帯</th><th>総数</th><th>勝ち</th><th>負け</th><th>勝率</th><th>PF</th></tr></thead><tbody></tbody></table></div>
+  <div class="note" id="timeNote"></div>
+
+  <div class="filter-bar">
+    <label for="timeFilter">↓ 以下のセクションを時間帯で絞り込み：</label>
+    <select id="timeFilter"><option value="all">すべての時間帯</option></select>
+  </div>
+
+  <h2 class="section-title">チェックリスト項目別（守れた時 vs 守れなかった時の勝率）</h2>
+  <div class="table-wrap"><table id="checklistTable"><thead><tr><th>項目</th><th>記録数</th><th>通過率</th><th>OK時の勝率</th><th>NG時の勝率</th></tr></thead><tbody></tbody></table></div>
+  <div class="note">「OK時の勝率」が「NG時の勝率」より明らかに高い項目ほど、実際に効いているルールという見方ができます。件数が少ない項目は参考程度に見てください。</div>
+
+  <h2 class="section-title">損切りタイプ別（タイプA：セットアップ通りで逆行 ／ タイプB：自分でTP・SLを動かした結果）</h2>
+  <div class="table-wrap"><table id="lossTypeTable"><thead><tr><th>タイプ</th><th>件数</th><th>合計損失額</th><th>平均損失額</th></tr></thead><tbody></tbody></table></div>
+
+  <footer>Phase2：パフォーマンス分析ダッシュボード（読み取り専用）</footer>
+
+<script>
+// ================= プロジェクト管理（risk_panel.html と共通仕様） =================
+const PROJECTS_KEY = 'tradingProjects';
+const ACTIVE_PROJECT_KEY = 'tradingActiveProjectId';
+
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveProjects(list) { localStorage.setItem(PROJECTS_KEY, JSON.stringify(list)); }
+function getActiveProjectId() { return localStorage.getItem(ACTIVE_PROJECT_KEY) || ''; }
+function setActiveProjectId(id) { localStorage.setItem(ACTIVE_PROJECT_KEY, id); }
+function newProjectId() { return 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000); }
+function getProjectById(id) { return loadProjects().find(p => p.id === id) || null; }
+
+function migrateLegacyIfNeeded() {
+  let projects = loadProjects();
+  if (projects.length) return projects;
+  // GitHub Pages等の新しいオリジンで開いた初回は旧設定が存在しないため、
+  // 動作確認済みのFundoraシートURLをデフォルトとして使う（プロジェクト管理画面からいつでも変更可）
+  const FUNDORA_DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/1dqL306EB8rI-RUZj6xWIQnkFRlS8_9syV5G_PMyG_h8/edit?gid=980747558#gid=980747558';
+  const legacyUrl = localStorage.getItem('riskPanelSheetUrl') || localStorage.getItem('riskPanelCsvUrl') || FUNDORA_DEFAULT_URL;
+  const legacySettings = JSON.parse(localStorage.getItem('riskPanelSettings') || '{}');
+  const toNum = (v, def) => { const n = Number(String(v || '').replace(/,/g, '')); return isNaN(n) || !n ? def : n; };
+  projects = [
+    { id: newProjectId(), name: 'Fundora マスタープラン', sheetUrl: legacyUrl,
+      initialCapital: toNum(legacySettings.initialCapital, 60000000), maxDD: toNum(legacySettings.maxDD, 6000000),
+      dailyLimitPct: toNum(legacySettings.dailyLimitPct, 5), targetPct: toNum(legacySettings.step1TargetPct, 8), tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'Fintokei トレード大会', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'Fintokei クオーツプラン', sheetUrl: '', initialCapital: 1000000, maxDD: 100000, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'HFM ハイレバ', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 10, targetPct: 0, tzOffsetHours: 0 },
+  ];
+  saveProjects(projects);
+  setActiveProjectId(projects[0].id);
+  return projects;
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function refreshProjectSelect() {
+  const projects = loadProjects();
+  const sel = document.getElementById('projectSelect');
+  const active = getActiveProjectId();
+  sel.innerHTML = projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.sheetUrl ? '' : '（未設定）'}</option>`).join('');
+  if (projects.find(p => p.id === active)) sel.value = active;
+  else if (projects.length) { sel.value = projects[0].id; setActiveProjectId(projects[0].id); }
+  document.getElementById('emptyBanner').style.display = projects.length ? 'none' : 'block';
+}
+
+function refreshProjectList() {
+  const projects = loadProjects();
+  const active = getActiveProjectId();
+  const listEl = document.getElementById('projectList');
+  listEl.innerHTML = projects.map(p => `
+    <div class="proj-list-item">
+      <span class="name">${p.id === active ? '✅ ' : ''}${escapeHtml(p.name)}${p.sheetUrl ? '' : '（URL未設定）'}</span>
+      <span class="actions">
+        <button class="secondary" data-action="select" data-id="${p.id}">選択</button>
+        <button class="secondary" data-action="edit" data-id="${p.id}">編集</button>
+      </span>
+    </div>`).join('');
+  listEl.querySelectorAll('button[data-action="select"]').forEach(btn => {
+    btn.addEventListener('click', () => { setActiveProjectId(btn.dataset.id); refreshProjectSelect(); refreshProjectList(); loadData(); });
+  });
+  listEl.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+    btn.addEventListener('click', () => loadProjectIntoForm(btn.dataset.id));
+  });
+}
+
+function loadProjectIntoForm(id) {
+  const p = getProjectById(id);
+  if (!p) return;
+  document.getElementById('projectManagerDetails').open = true;
+  document.getElementById('pName').dataset.editingId = id;
+  document.getElementById('pName').value = p.name;
+  document.getElementById('pUrl').value = p.sheetUrl || '';
+  document.getElementById('pTzOffset').value = p.tzOffsetHours || 0;
+}
+function clearForm() {
+  document.getElementById('pName').dataset.editingId = '';
+  document.getElementById('pName').value = '';
+  document.getElementById('pUrl').value = '';
+  document.getElementById('pTzOffset').value = '0';
+}
+
+// ================= 汎用ユーティリティ =================
+function toNumber(v) {
+  if (v == null) return NaN;
+  const cleaned = String(v).replace(/[¥,%\s]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+function parseDateInfo(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const gv = s.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+))?/);
+  if (gv) { const hasTime = gv[4] !== undefined; return { date: new Date(parseInt(gv[1]), parseInt(gv[2]), parseInt(gv[3])), hour: hasTime ? parseInt(gv[4]) : null }; }
+  const dm = s.match(/^(\d{1,2})[\/\-月](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?/);
+  if (dm) { const now = new Date(); return { date: new Date(now.getFullYear(), parseInt(dm[1], 10) - 1, parseInt(dm[2], 10)), hour: dm[3] !== undefined ? parseInt(dm[3], 10) : null }; }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return { date: new Date(d.getFullYear(), d.getMonth(), d.getDate()), hour: (d.getHours() || d.getMinutes()) ? d.getHours() : null };
+  return null;
+}
+function parseSheetUrl(input) {
+  const idMatch = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = input.match(/[?#&]gid=(\d+)/);
+  if (!idMatch) return null;
+  return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
+}
+function loadViaJSONP(sheetId, gid) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gvizCallback_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    let done = false;
+    const script = document.createElement('script');
+    function cleanup() { delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cbName] = function (response) {
+      if (done) return; done = true; cleanup();
+      try {
+        if (!response || !response.table || !response.table.rows) { reject(new Error('シートのデータ形式を読み取れませんでした')); return; }
+        const rows = response.table.rows.map(r => (r.c || []).map(cell => {
+          if (!cell) return '';
+          if (cell.f !== undefined && cell.f !== null) return cell.f;
+          if (cell.v !== undefined && cell.v !== null) return cell.v;
+          return '';
+        }));
+        resolve(rows);
+      } catch (e) { reject(e); }
+    };
+    const timer = setTimeout(() => { if (done) return; done = true; cleanup(); reject(new Error('タイムアウトしました（共有設定を確認してください）')); }, 12000);
+    script.onerror = function () { if (done) return; done = true; cleanup(); reject(new Error('スクリプトの読み込みに失敗しました')); };
+    script.src = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/gviz/tq?gid=' + gid + '&tqx=responseHandler:' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+const COL = {
+  date:0, pair:1, side:2, result:3, pnl:4, cum:5, balance:6, pnlRate:7,
+  h4:8, h1:9, m15:10, m5trend:11, strongLine:12, rr:13, chartWatch:14,
+  tpChange:15, slChange:16, pyramid:17, ruleCount:18, tpReason:19, slReason:20,
+  onePct:21, lossType:22, time:23,
+};
+
+const DEMO_ROWS = [
+  ["7/15","XAUUSD","SELL","○","853287","","58708351","","下降","下降","下降","OK","OK","1.1","してない","してない","してない","",""],
+  ["7/15","XAUUSD","SELL","×","-199763","","58508588","","下降","下降","下降","OK","OK","1.0","NG","した","した","あり"],
+  ["7/18","XAUUSD","SELL","○","586158","","59094746","","下降","下降","下降","OK","OK","1.15","してない","してない","してない","あり"],
+];
+
+function newBucket() { return { count:0, wins:0, losses:0, sumWin:0, sumLoss:0, sumPnl:0 }; }
+function addToBucket(b, pnl, isWin) { b.count++; b.sumPnl += pnl; if (isWin) { b.wins++; b.sumWin += pnl; } else { b.losses++; b.sumLoss += Math.abs(pnl); } }
+function bucketStats(b) {
+  const winRate = b.count ? b.wins / b.count : 0;
+  const pf = b.sumLoss > 0 ? (b.sumWin / b.sumLoss) : (b.sumWin > 0 ? Infinity : 0);
+  const expectancy = b.count ? b.sumPnl / b.count : 0;
+  return { ...b, winRate, pf, expectancy };
+}
+function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
+function fmtPF(x) { if (!isFinite(x)) return '∞'; const cls = x >= 1 ? 'pf-pos' : 'pf-neg'; return `<span class="${cls}">${x.toFixed(2)}</span>`; }
+function fmtYen(x) { return '¥' + Math.round(x).toLocaleString(); }
+
+// ================= メイン =================
+async function loadData() {
+  const active = getProjectById(getActiveProjectId());
+  const statusLine = document.getElementById('statusLine');
+  if (!active) { statusLine.textContent = 'プロジェクト未選択'; window.allRows = []; window.activeProject = null; renderAll(); return; }
+  statusLine.textContent = active.name + ' を読み込み中...';
+
+  let rows;
+  if (!active.sheetUrl) {
+    rows = DEMO_ROWS;
+    statusLine.textContent = active.name + '：URL未設定のためサンプルデータ表示中';
+  } else {
+    const parsed = parseSheetUrl(active.sheetUrl);
+    if (!parsed) {
+      rows = DEMO_ROWS;
+      statusLine.textContent = 'URL形式エラー / サンプルデータ表示中';
+    } else {
+      try {
+        const raw = await loadViaJSONP(parsed.id, parsed.gid);
+        rows = raw.filter((r, i) => !(i === 0 && /日付/.test(String(r[0] || ''))));
+        rows = rows.filter(r => r[COL.date] && r[COL.balance]);
+        if (!rows.length) throw new Error('データ行が見つかりませんでした');
+        statusLine.textContent = active.name + ' 最終更新: ' + new Date().toLocaleString('ja-JP') + `（${rows.length}件）`;
+      } catch (e) {
+        rows = DEMO_ROWS;
+        statusLine.textContent = active.name + '：取得エラー（' + (e && e.message ? e.message : e) + '）/ サンプルデータ表示中';
+      }
+    }
+  }
+  window.allRows = rows;
+  window.activeProject = active;
+  renderAll();
+}
+
+function renderAll() { render(window.allRows || [], window.activeProject); }
+
+function render(rows, project) {
+  const tzOffset = project ? (Number(project.tzOffsetHours) || 0) : 0;
+
+  const parsedRowsAll = rows.map(r => {
+    const pnl = toNumber(r[COL.pnl]);
+    const result = (r[COL.result] || '').trim();
+    const isWin = result === '○' || (isNaN(pnl) ? false : pnl > 0);
+    const dInfo = parseDateInfo(r[COL.date]);
+    if (dInfo && dInfo.hour === null && r[COL.time]) {
+      const tm = String(r[COL.time]).match(/(\d{1,2}):(\d{2})/);
+      if (tm) dInfo.hour = parseInt(tm[1], 10);
+    }
+    if (dInfo && dInfo.hour !== null && tzOffset) {
+      dInfo.hour = ((dInfo.hour + tzOffset) % 24 + 24) % 24;
+    }
+    return { r, pnl, isWin, result, dInfo };
+  }).filter(x => !isNaN(x.pnl) && x.dInfo);
+
+  const pairMap = {};
+  parsedRowsAll.forEach(x => {
+    const pair = (x.r[COL.pair] || '不明').trim();
+    pairMap[pair] = pairMap[pair] || newBucket();
+    addToBucket(pairMap[pair], x.pnl, x.isWin);
+  });
+  fillTable('pairTable', Object.entries(pairMap).sort((a,b)=>b[1].count-a[1].count), (k,b)=>{
+    const s = bucketStats(b);
+    return [k, s.count, s.wins, s.losses, fmtPct(s.winRate), fmtPF(s.pf), fmtYen(s.expectancy)];
+  });
+
+  const pairFilterEl = document.getElementById('pairFilter');
+  const currentSelection = pairFilterEl.value || 'all';
+  const pairNames = Object.keys(pairMap).sort();
+  pairFilterEl.innerHTML = '<option value="all">すべての通貨ペア</option>' + pairNames.map(p => `<option value="${p}">${p}</option>`).join('');
+  pairFilterEl.value = pairNames.includes(currentSelection) || currentSelection === 'all' ? currentSelection : 'all';
+
+  const selectedPair = pairFilterEl.value;
+  const rowsAfterPair = selectedPair === 'all' ? parsedRowsAll : parsedRowsAll.filter(x => (x.r[COL.pair] || '').trim() === selectedPair);
+
+  const monthKeyOf = x => `${x.dInfo.date.getFullYear()}/${String(x.dInfo.date.getMonth()+1).padStart(2,'0')}`;
+  const monthMap = {};
+  rowsAfterPair.forEach(x => { const key = monthKeyOf(x); monthMap[key] = monthMap[key] || newBucket(); addToBucket(monthMap[key], x.pnl, x.isWin); });
+  const monthKeys = Object.keys(monthMap).sort();
+  fillTable('monthTable', monthKeys.map(k => [k, monthMap[k]]), (k,b)=>{
+    const s = bucketStats(b);
+    return [k, s.count, s.wins, s.losses, fmtPct(s.winRate), fmtPF(s.pf), fmtYen(s.expectancy)];
+  });
+
+  const monthFilterEl = document.getElementById('monthFilter');
+  const currentMonthSel = monthFilterEl.value || 'all';
+  monthFilterEl.innerHTML = '<option value="all">すべての月</option>' + monthKeys.map(k => `<option value="${k}">${k}</option>`).join('');
+  monthFilterEl.value = monthKeys.includes(currentMonthSel) || currentMonthSel === 'all' ? currentMonthSel : 'all';
+
+  const selectedMonth = monthFilterEl.value;
+  const rowsAfterMonth = selectedMonth === 'all' ? rowsAfterPair : rowsAfterPair.filter(x => monthKeyOf(x) === selectedMonth);
+
+  const bands = [
+    { label: '0:00〜8:00', test: h => h >= 0 && h < 8 },
+    { label: '8:00〜16:00（東京時間）', test: h => h >= 8 && h < 16 },
+    { label: '16:00〜22:00（欧州時間）', test: h => h >= 16 && h < 22 },
+    { label: '22:00〜24:00（北米時間）', test: h => h >= 22 && h < 24 },
+  ];
+  const withTime = rowsAfterMonth.filter(x => x.dInfo.hour !== null);
+  const timeNote = document.getElementById('timeNote');
+  const timeFilterEl = document.getElementById('timeFilter');
+  const currentTimeSel = timeFilterEl.value || 'all';
+  let activeBandLabels = [];
+  if (!withTime.length) {
+    document.querySelector('#timeTable tbody').innerHTML = '';
+    timeNote.textContent = '日付列に時刻情報が含まれていないため、時間帯別分析は表示できません。';
+    timeFilterEl.innerHTML = '<option value="all">すべての時間帯</option>';
+    timeFilterEl.value = 'all';
+  } else {
+    timeNote.textContent = tzOffset ? `（タイムゾーン補正 ${tzOffset > 0 ? '+' : ''}${tzOffset}時間を適用済み）` : '';
+    const timeMap = {};
+    bands.forEach(b => timeMap[b.label] = newBucket());
+    withTime.forEach(x => { const band = bands.find(b => b.test(x.dInfo.hour)); if (band) addToBucket(timeMap[band.label], x.pnl, x.isWin); });
+    const activeBands = bands.filter(b => timeMap[b.label].count > 0);
+    activeBandLabels = activeBands.map(b => b.label);
+    fillTable('timeTable', activeBands.map(b => [b.label, timeMap[b.label]]), (k,b)=>{
+      const s = bucketStats(b);
+      return [k, s.count, s.wins, s.losses, fmtPct(s.winRate), fmtPF(s.pf)];
+    });
+    timeFilterEl.innerHTML = '<option value="all">すべての時間帯</option>' + activeBandLabels.map(l => `<option value="${l}">${l}</option>`).join('');
+    timeFilterEl.value = activeBandLabels.includes(currentTimeSel) || currentTimeSel === 'all' ? currentTimeSel : 'all';
+  }
+
+  const selectedTimeBand = timeFilterEl.value;
+  const parsedRows = (selectedTimeBand === 'all' || !withTime.length) ? rowsAfterMonth
+    : rowsAfterMonth.filter(x => { if (x.dInfo.hour === null) return false; const band = bands.find(b => b.test(x.dInfo.hour)); return band && band.label === selectedTimeBand; });
+
+  const checklistDefs = [
+    { label: 'H4・H1・M15トレンド一致', ok: r => r[COL.h4] && r[COL.h4]===r[COL.h1] && r[COL.h1]===r[COL.m15] },
+    { label: 'M5トレンド転換', ok: r => /^OK$/i.test((r[COL.m5trend]||'').trim()) },
+    { label: '強いラインが近すぎない', ok: r => /^OK$/i.test((r[COL.strongLine]||'').trim()) },
+    { label: 'RR1.0〜1.2', ok: r => { const v=toNumber(r[COL.rr]); return isNaN(v) ? /^OK$/i.test((r[COL.rr]||'').trim()) : (v>=1.0 && v<=1.2); } },
+    { label: 'チャートを見続けない', ok: r => (r[COL.chartWatch]||'').trim()==='してない' },
+    { label: 'TPを不適切に変更しない', ok: r => (r[COL.tpChange]||'').trim()==='してない' },
+    { label: 'SLを不適切に変更しない', ok: r => (r[COL.slChange]||'').trim()==='してない' },
+  ];
+  const clRows = [];
+  checklistDefs.forEach(def => {
+    const withValue = parsedRows.filter(x => {
+      const raw = [x.r[COL.h4], x.r[COL.m5trend], x.r[COL.strongLine], x.r[COL.rr], x.r[COL.chartWatch], x.r[COL.tpChange], x.r[COL.slChange]];
+      return raw.some(v => v !== '' && v != null);
+    });
+    if (!withValue.length) return;
+    const okRows = withValue.filter(x => def.ok(x.r));
+    const ngRows = withValue.filter(x => !def.ok(x.r));
+    const okWinRate = okRows.length ? okRows.filter(x=>x.isWin).length / okRows.length : null;
+    const ngWinRate = ngRows.length ? ngRows.filter(x=>x.isWin).length / ngRows.length : null;
+    clRows.push([def.label, withValue.length, fmtPct(okRows.length / withValue.length),
+      okWinRate === null ? '–' : fmtPct(okWinRate) + ` (n=${okRows.length})`,
+      ngWinRate === null ? '–' : fmtPct(ngWinRate) + ` (n=${ngRows.length})`]);
+  });
+  fillRawTable('checklistTable', clRows);
+
+  const typeMap = { 'タイプA': newBucket(), 'タイプB': newBucket() };
+  parsedRows.forEach(x => {
+    const t = (x.r[COL.lossType] || '').trim();
+    if (t === 'タイプA' || t === 'タイプB') { typeMap[t].count++; if (x.pnl < 0) typeMap[t].sumLoss += Math.abs(x.pnl); }
+  });
+  fillRawTable('lossTypeTable', Object.entries(typeMap).map(([k,b]) => [k, b.count, fmtYen(b.sumLoss), b.count ? fmtYen(b.sumLoss / b.count) : '–']));
+}
+
+function fillTable(tableId, entries, rowFn) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  tbody.innerHTML = entries.map(([k, b]) => '<tr>' + rowFn(k, b).map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
+}
+function fillRawTable(tableId, rows) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  tbody.innerHTML = rows.map(cols => '<tr>' + cols.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  migrateLegacyIfNeeded();
+  refreshProjectSelect();
+  refreshProjectList();
+
+  document.getElementById('projectSelect').addEventListener('change', (e) => {
+    setActiveProjectId(e.target.value);
+    refreshProjectList();
+    loadData();
+  });
+
+  document.getElementById('newProjectBtn').addEventListener('click', () => {
+    clearForm();
+    document.getElementById('projectManagerDetails').open = true;
+  });
+
+  document.getElementById('saveProjectBtn').addEventListener('click', () => {
+    const editingId = document.getElementById('pName').dataset.editingId;
+    const name = document.getElementById('pName').value.trim();
+    if (!name) { alert('プロジェクト名を入力してください'); return; }
+    const projects = loadProjects();
+    const patch = {
+      name,
+      sheetUrl: document.getElementById('pUrl').value.trim(),
+      tzOffsetHours: toNumber(document.getElementById('pTzOffset').value) || 0,
+    };
+    let id = editingId;
+    if (id && projects.find(p => p.id === id)) {
+      const idx = projects.findIndex(p => p.id === id);
+      projects[idx] = { ...projects[idx], ...patch };
+    } else {
+      id = newProjectId();
+      projects.push({ id, initialCapital:0, maxDD:0, dailyLimitPct:5, targetPct:0, ...patch });
+    }
+    saveProjects(projects);
+    setActiveProjectId(id);
+    document.getElementById('pName').dataset.editingId = id;
+    refreshProjectSelect();
+    refreshProjectList();
+    loadData();
+  });
+
+  document.getElementById('deleteProjectBtn').addEventListener('click', () => {
+    const editingId = document.getElementById('pName').dataset.editingId;
+    if (!editingId) { alert('削除するプロジェクトを一覧から「編集」で選んでください'); return; }
+    if (!confirm('このプロジェクトを削除しますか？（スプレッドシート自体は削除されません）')) return;
+    let projects = loadProjects().filter(p => p.id !== editingId);
+    saveProjects(projects);
+    if (getActiveProjectId() === editingId) setActiveProjectId(projects.length ? projects[0].id : '');
+    clearForm();
+    refreshProjectSelect();
+    refreshProjectList();
+    loadData();
+  });
+
+  document.getElementById('reloadBtn').addEventListener('click', loadData);
+  document.getElementById('pairFilter').addEventListener('change', renderAll);
+  document.getElementById('monthFilter').addEventListener('change', renderAll);
+  document.getElementById('timeFilter').addEventListener('change', renderAll);
+  loadData();
+});
+</script>
+</body>
+</html>
