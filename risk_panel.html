@@ -71,6 +71,7 @@
     <div class="settings-grid">
       <div><label>プロジェクト名</label><input type="text" id="pName" placeholder="例：Fundora マスタープラン"></div>
       <div><label>スプレッドシートURL</label><input type="text" id="pUrl" placeholder="https://docs.google.com/spreadsheets/d/xxxx/edit?gid=xxxx"></div>
+      <div><label>記録フォームURL（回答用）</label><input type="text" id="pFormUrl" placeholder="https://docs.google.com/forms/d/e/xxxx/viewform"></div>
       <div><label>初期資金（円）</label><input type="text" inputmode="numeric" id="pInitialCapital" value="60,000,000"></div>
       <div><label>最大DD上限（円）</label><input type="text" inputmode="numeric" id="pMaxDD" value="6,000,000"></div>
       <div><label>日次損失上限（％）</label><input type="number" id="pDailyLimitPct" value="5"></div>
@@ -139,6 +140,7 @@ function migrateLegacyIfNeeded() {
   // GitHub Pages等の新しいオリジンで開いた初回は旧設定が存在しないため、
   // 動作確認済みのFundoraシートURLをデフォルトとして使う（プロジェクト管理画面からいつでも変更可）
   const FUNDORA_DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/1dqL306EB8rI-RUZj6xWIQnkFRlS8_9syV5G_PMyG_h8/edit?gid=980747558#gid=980747558';
+  const FUNDORA_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSefmLDGLfYRskTeB6rA_piFhgitZMQMWjlvVVWqObdLI3G_-Q/viewform?usp=header';
   const legacyUrl = localStorage.getItem('riskPanelSheetUrl') || localStorage.getItem('riskPanelCsvUrl') || FUNDORA_DEFAULT_URL;
   const legacySettings = JSON.parse(localStorage.getItem('riskPanelSettings') || '{}');
 
@@ -146,16 +148,16 @@ function migrateLegacyIfNeeded() {
 
   projects = [
     {
-      id: newProjectId(), name: 'Fundora マスタープラン', sheetUrl: legacyUrl,
+      id: newProjectId(), name: 'Fundora マスタープラン', sheetUrl: legacyUrl, formUrl: FUNDORA_FORM_URL,
       initialCapital: toNum(legacySettings.initialCapital, 60000000),
       maxDD: toNum(legacySettings.maxDD, 6000000),
       dailyLimitPct: toNum(legacySettings.dailyLimitPct, 5),
       targetPct: toNum(legacySettings.step1TargetPct, 8),
       tzOffsetHours: 0,
     },
-    { id: newProjectId(), name: 'Fintokei トレード大会', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
-    { id: newProjectId(), name: 'Fintokei クオーツプラン', sheetUrl: '', initialCapital: 1000000, maxDD: 100000, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
-    { id: newProjectId(), name: 'HFM ハイレバ', sheetUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 10, targetPct: 0, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'Fintokei トレード大会', sheetUrl: '', formUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'Fintokei クオーツプラン', sheetUrl: '', formUrl: '', initialCapital: 1000000, maxDD: 100000, dailyLimitPct: 5, targetPct: 8, tzOffsetHours: 0 },
+    { id: newProjectId(), name: 'HFM ハイレバ', sheetUrl: '', formUrl: '', initialCapital: 0, maxDD: 0, dailyLimitPct: 10, targetPct: 0, tzOffsetHours: 0 },
   ];
   saveProjects(projects);
   setActiveProjectId(projects[0].id);
@@ -201,6 +203,7 @@ function loadProjectIntoForm(id) {
   document.getElementById('pName').dataset.editingId = id;
   document.getElementById('pName').value = p.name;
   document.getElementById('pUrl').value = p.sheetUrl || '';
+  document.getElementById('pFormUrl').value = p.formUrl || '';
   document.getElementById('pInitialCapital').value = Number(p.initialCapital || 0).toLocaleString('en-US');
   document.getElementById('pMaxDD').value = Number(p.maxDD || 0).toLocaleString('en-US');
   document.getElementById('pDailyLimitPct').value = p.dailyLimitPct;
@@ -211,6 +214,7 @@ function clearForm() {
   document.getElementById('pName').dataset.editingId = '';
   document.getElementById('pName').value = '';
   document.getElementById('pUrl').value = '';
+  document.getElementById('pFormUrl').value = '';
   document.getElementById('pInitialCapital').value = '0';
   document.getElementById('pMaxDD').value = '0';
   document.getElementById('pDailyLimitPct').value = '5';
@@ -413,6 +417,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const data = {
       name,
       sheetUrl: document.getElementById('pUrl').value.trim(),
+      formUrl: document.getElementById('pFormUrl').value.trim(),
       initialCapital: toNumber(document.getElementById('pInitialCapital').value) || 0,
       maxDD: toNumber(document.getElementById('pMaxDD').value) || 0,
       dailyLimitPct: toNumber(document.getElementById('pDailyLimitPct').value) || 5,

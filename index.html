@@ -37,6 +37,15 @@
   }
   .nav-btn .icon { font-size:22px; line-height:1; }
   .nav-btn.active { color:#2f3e54; font-weight:600; }
+
+  .fab {
+    position:absolute; right:16px; bottom:16px; z-index:10;
+    display:flex; align-items:center; gap:8px;
+    background:#e88fb0; color:#fff; border:none; border-radius:999px;
+    padding:12px 18px; font-size:14px; font-weight:600; font-family:inherit;
+    box-shadow:0 4px 14px rgba(0,0,0,0.22); cursor:pointer;
+  }
+  .fab .icon { font-size:18px; }
 </style>
 </head>
 <body>
@@ -46,6 +55,10 @@
       <iframe class="view-frame active" id="frame-risk" src="risk_panel.html" title="リスク管理パネル"></iframe>
       <iframe class="view-frame" id="frame-analysis" src="analysis_panel.html" title="パフォーマンス分析ダッシュボード"></iframe>
       <iframe class="view-frame" id="frame-character" src="character_panel.html" title="相棒"></iframe>
+      <button class="fab" id="recordFab">
+        <span class="icon">📝</span>
+        <span>記録する</span>
+      </button>
     </div>
 
     <nav class="bottom-nav">
@@ -79,6 +92,21 @@
       navigator.serviceWorker.register('sw.js').catch(() => {});
     });
   }
+
+  // 「記録する」ボタン：今アクティブなプロジェクトのフォームURLを新しいタブで開く
+  document.getElementById('recordFab').addEventListener('click', () => {
+    let projects = [];
+    try { projects = JSON.parse(localStorage.getItem('tradingProjects') || '[]'); } catch (e) {}
+    const activeId = localStorage.getItem('tradingActiveProjectId') || '';
+    const active = projects.find(p => p.id === activeId);
+    if (active && active.formUrl) {
+      window.open(active.formUrl, '_blank');
+    } else if (active) {
+      alert(`「${active.name}」には記録フォームのURLがまだ登録されていません。\nプロジェクト管理画面から追加してください。`);
+    } else {
+      alert('プロジェクトが選択されていません。リスク管理タブでプロジェクトを選んでください。');
+    }
+  });
 </script>
 </body>
 </html>
