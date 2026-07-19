@@ -11,6 +11,9 @@ const APP_SHELL = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './character_assets/cat-happy.png',
+  './character_assets/cat-sad.png',
+  './character_assets/cat-neutral.png',
 ];
 
 self.addEventListener('install', (event) => {

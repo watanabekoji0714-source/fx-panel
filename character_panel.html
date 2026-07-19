@@ -18,9 +18,9 @@
   button.secondary { background:#eef0f3; color:var(--text); }
 
   .stage-card { background:var(--card-bg); border:1px solid var(--border); border-radius:18px; padding:24px 18px; text-align:center; margin-bottom:16px; position:relative; overflow:hidden; }
-  .cat-wrap { position:relative; width:180px; height:180px; margin:0 auto 10px auto; }
-  .cat-svg { width:100%; height:100%; transition:filter 0.4s ease; }
-  .mood-badge { position:absolute; top:-4px; right:6px; font-size:34px; }
+  .cat-wrap { position:relative; width:200px; height:250px; margin:0 auto 10px auto; border-radius:16px; overflow:hidden; background:#1f2430; }
+  .cat-img { width:100%; height:100%; object-fit:cover; object-position:top center; display:block; transition:opacity 0.25s ease; }
+  .mood-badge { position:absolute; top:6px; right:6px; font-size:30px; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
   .sparkle { position:absolute; inset:0; pointer-events:none; }
   .sparkle span { position:absolute; font-size:18px; opacity:0; animation:sparkle 1.6s ease-in-out infinite; }
   @keyframes sparkle { 0%{opacity:0; transform:translateY(6px) scale(0.6);} 40%{opacity:1; transform:translateY(-6px) scale(1);} 100%{opacity:0; transform:translateY(-16px) scale(0.6);} }
@@ -60,36 +60,7 @@
     <div class="cat-wrap">
       <div class="mood-badge" id="moodBadge"></div>
       <div class="sparkle" id="sparkleLayer"></div>
-      <svg class="cat-svg" id="catSvg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-        <!-- モデル：グレー×ホワイトの長毛猫／ちいかわ・カナヘイ・サンリオ系の極力シンプルな1シルエット+フラット配色デザイン -->
-        <!-- しっぽ（丸いシルエットの陰からちらっと覗くだけ、単色フラット） -->
-        <path d="M150,176 C186,171 193,128 163,112 C187,116 199,151 176,178 C167,187 155,186 150,176 Z" fill="#b9c3cd"/>
-        <!-- 首まわりのふわふわ（左右2つの単色タフトのみ） -->
-        <path d="M28,110 Q7,133 20,160 Q41,147 45,120 Z" fill="#fefdf9"/>
-        <path d="M172,110 Q193,133 180,160 Q159,147 155,120 Z" fill="#fefdf9"/>
-        <!-- 耳（内側の色分けはせず単色。左右わずかに大きさを変えて手描き感を出す） -->
-        <path d="M60,93 Q41,57 66,25 Q91,52 81,91 Z" fill="#b9c3cd"/>
-        <path d="M140,90 Q160,53 135,22 Q108,50 119,90 Z" fill="#b9c3cd"/>
-        <!-- 体全体（頭と体を一体化した、ほぼ真円に近いまんまるフォルム） -->
-        <ellipse cx="100" cy="120" rx="68" ry="64" fill="#b9c3cd"/>
-        <!-- 顔まわりの白ブレーズ（曲線を減らしたシンプルな丸型マスク） -->
-        <path d="M100,66 Q138,70 152,100 Q156,140 128,168 Q114,184 100,186 Q86,184 72,168 Q44,140 48,100 Q62,70 100,66 Z" fill="#fefdf9"/>
-        <!-- ほっぺ -->
-        <ellipse cx="52" cy="114" rx="11" ry="6.5" fill="#ffb0c2" opacity="0.4"/>
-        <ellipse cx="148" cy="114" rx="11" ry="6.5" fill="#ffb0c2" opacity="0.4"/>
-        <!-- 目（サンリオ/カナヘイ風：白目レイヤーなしのフラットな緑の目＋黒目＋ハイライト1つのみ、片目3シェイプ） -->
-        <g id="eyes">
-          <ellipse cx="68" cy="100" rx="15" ry="17" fill="#b7d66a"/>
-          <circle cx="68" cy="104" r="7.5" fill="#262421"/>
-          <circle cx="73" cy="94" r="2.7" fill="#ffffff"/>
-          <ellipse cx="132" cy="100" rx="15" ry="17" fill="#b7d66a"/>
-          <circle cx="132" cy="104" r="7.5" fill="#262421"/>
-          <circle cx="137" cy="94" r="2.7" fill="#ffffff"/>
-        </g>
-        <!-- 鼻・口（極小のドット鼻＋控えめな1本線の口。表情差分は口の向きだけで表現） -->
-        <path d="M94,124 L106,124 L100,132 Z" fill="#f2a7b5"/>
-        <path id="mouth" d="M92,140 Q100,144 108,140" stroke="#c98a95" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      </svg>
+      <img class="cat-img" id="catImg" src="character_assets/cat-neutral.png" alt="トレにゃん">
     </div>
     <div class="level-title" id="stageTitle">–</div>
     <div class="level-num" id="levelNum">Lv. –</div>
@@ -277,30 +248,27 @@ function render(combined) {
   const latest = parsed[parsed.length - 1];
   const moodBadge = document.getElementById('moodBadge');
   const moodLine = document.getElementById('moodLine');
-  const eyes = document.getElementById('eyes');
-  const mouth = document.getElementById('mouth');
-  const catSvg = document.getElementById('catSvg');
+  const catImg = document.getElementById('catImg');
   const sparkleLayer = document.getElementById('sparkleLayer');
   sparkleLayer.innerHTML = '';
-  catSvg.style.filter = 'none';
 
   if (!latest) {
     moodBadge.textContent = '';
     moodLine.textContent = 'まだ記録がありません。';
+    catImg.src = 'character_assets/cat-neutral.png';
   } else if (latest.lossType === 'タイプB') {
     moodBadge.textContent = '😿';
     moodLine.textContent = 'しょんぼり中…次に良いトレードを記録すると立ち直ります。';
-    mouth.setAttribute('d', 'M92,144 Q100,138 108,144');
-    catSvg.style.filter = 'saturate(0.55) brightness(0.92)';
+    catImg.src = 'character_assets/cat-sad.png';
   } else if (latest.ruleCount === MAX_RULE_COUNT) {
     moodBadge.textContent = '✨';
     moodLine.textContent = '絶好調！ルール通りの完璧なトレードでした。';
-    mouth.setAttribute('d', 'M88,138 Q100,148 112,138');
+    catImg.src = 'character_assets/cat-happy.png';
     sparkleLayer.innerHTML = '<span style="left:20%;top:10%;animation-delay:0s;">✨</span><span style="left:70%;top:15%;animation-delay:0.4s;">✨</span><span style="left:45%;top:5%;animation-delay:0.8s;">⭐</span>';
   } else {
     moodBadge.textContent = '🐾';
     moodLine.textContent = 'いい調子。この習慣を続けていきましょう。';
-    mouth.setAttribute('d', 'M92,140 Q100,144 108,140');
+    catImg.src = 'character_assets/cat-neutral.png';
   }
 
   const historyList = document.getElementById('historyList');
