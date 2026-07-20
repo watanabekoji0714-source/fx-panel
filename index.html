@@ -117,6 +117,27 @@
   applyHashTab();
   window.addEventListener('hashchange', applyHashTab);
 
+  // フリック操作でのタブ移動：各iframe内で検知したスワイプをpostMessageで受け取る
+  const TAB_ORDER = ['frame-risk', 'frame-analysis', 'frame-character'];
+  function currentActiveFrameId() {
+    const active = document.querySelector('.view-frame.active');
+    return active ? active.id : TAB_ORDER[0];
+  }
+  function goToAdjacentTab(direction) {
+    const idx = TAB_ORDER.indexOf(currentActiveFrameId());
+    if (idx === -1) return;
+    const nextIdx = direction === 'left' ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= TAB_ORDER.length) return; // 端では折り返さない
+    selectTab(TAB_ORDER[nextIdx]);
+  }
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    const data = e.data;
+    if (data && data.source === 'fxpanel' && data.type === 'swipe') {
+      goToAdjacentTab(data.direction);
+    }
+  });
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').catch(() => {});
