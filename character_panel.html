@@ -188,12 +188,36 @@ const DEMO_ROWS = [
 // ================= 育成ロジック =================
 const LEVEL_XP = 50; // 1レベルに必要なポイント
 
-function stageTitleFor(level) {
-  if (level >= 15) return '伝説の相棒';
-  if (level >= 10) return 'ベテラン相棒';
-  if (level >= 6) return '頼れる相棒';
-  if (level >= 3) return 'がんばり屋の相棒';
-  return '見習いの相棒';
+// 進化ステージ（レベル帯ごとに5段階。画像ファイル名にはkeyを使う）
+const STAGES = [
+  { key: 'kitten',      title: '子猫',   minLevel: 1 },
+  { key: 'apprentice',  title: '見習い', minLevel: 10 },
+  { key: 'fullfledged', title: '一人前', minLevel: 30 },
+  { key: 'veteran',     title: 'ベテラン', minLevel: 50 },
+  { key: 'legend',      title: '伝説',   minLevel: 70 },
+];
+
+function stageInfoFor(level) {
+  let current = STAGES[0];
+  for (const s of STAGES) {
+    if (level >= s.minLevel) current = s;
+  }
+  return current;
+}
+
+// 気分（3パターン）。moodKeyは画像ファイル名に使う
+const MOODS = {
+  happy: { key: 'happy', badge: '✨', line: 'やる気満々！ルール通りの完璧なトレードでした。' },
+  sad: { key: 'sad', badge: '😿', line: '悲しい…次に良いトレードを記録すると立ち直ります。' },
+  neutral: { key: 'neutral', badge: '🐾', line: '考え中。この調子で習慣を続けていきましょう。' },
+};
+
+function catImageSrc(stageKey, moodKey) {
+  return `character_assets/cat-${stageKey}-${moodKey}.png`;
+}
+// 該当ステージの画像がまだ用意されていない場合のフォールバック（既存の3枚の汎用画像）
+function catImageFallback(moodKey) {
+  return `character_assets/cat-${moodKey}.png`;
 }
 
 function computeStreak(sortedRows) {
@@ -263,8 +287,10 @@ function render(combined) {
   const xpInLevel = totalXp % LEVEL_XP;
   const xpRatio = xpInLevel / LEVEL_XP;
 
+  const stageInfo = stageInfoFor(level);
+
   document.getElementById('levelNum').textContent = `Lv. ${level}`;
-  document.getElementById('stageTitle').textContent = stageTitleFor(level);
+  document.getElementById('stageTitle').textContent = stageInfo.title;
   document.getElementById('xpFill').style.width = `${Math.max(2, xpRatio * 100)}%`;
   document.getElementById('xpSub').textContent = `${xpInLevel} / ${LEVEL_XP} pt（次のレベルまで ${LEVEL_XP - xpInLevel}pt）`;
   document.getElementById('totalXpNum').textContent = `${totalXp}pt`;
@@ -281,10 +307,22 @@ function render(combined) {
   const sparkleLayer = document.getElementById('sparkleLayer');
   sparkleLayer.innerHTML = '';
 
-  function setMood(src, moodClass) {
-    catImg.src = src;
+  function setMood(moodKey) {
+    const mood = MOODS[moodKey];
+    moodBadge.textContent = mood.badge;
+    moodLine.textContent = latest ? mood.line : 'まだ記録がありません。';
+
+    // まずステージ別の画像を試し、404なら既存の汎用3枚にフォールバックする
+    const primarySrc = catImageSrc(stageInfo.key, mood.key);
+    const fallbackSrc = catImageFallback(mood.key);
+    catImg.onerror = function () {
+      catImg.onerror = null; // フォールバックでもエラーになったら無限ループしないように
+      catImg.src = fallbackSrc;
+    };
+    catImg.src = primarySrc;
+
     catImg.classList.remove('mood-neutral', 'mood-happy', 'mood-sad');
-    catImg.classList.add(moodClass);
+    catImg.classList.add('mood-' + mood.key);
     // 気分が切り替わった瞬間のポップ演出（クラスを外して強制リフローしてから付け直すと再生できる）
     catWrap.classList.remove('pop');
     void catWrap.offsetWidth;
@@ -292,22 +330,14 @@ function render(combined) {
   }
 
   if (!latest) {
-    moodBadge.textContent = '';
-    moodLine.textContent = 'まだ記録がありません。';
-    setMood('character_assets/cat-neutral.png', 'mood-neutral');
+    setMood('neutral');
   } else if (latest.lossType === 'タイプB') {
-    moodBadge.textContent = '😿';
-    moodLine.textContent = 'しょんぼり中…次に良いトレードを記録すると立ち直ります。';
-    setMood('character_assets/cat-sad.png', 'mood-sad');
+    setMood('sad');
   } else if (latest.ruleCount === MAX_RULE_COUNT) {
-    moodBadge.textContent = '✨';
-    moodLine.textContent = '絶好調！ルール通りの完璧なトレードでした。';
-    setMood('character_assets/cat-happy.png', 'mood-happy');
+    setMood('happy');
     sparkleLayer.innerHTML = '<span style="left:20%;top:10%;animation-delay:0s;">✨</span><span style="left:70%;top:15%;animation-delay:0.4s;">✨</span><span style="left:45%;top:5%;animation-delay:0.8s;">⭐</span>';
   } else {
-    moodBadge.textContent = '🐾';
-    moodLine.textContent = 'いい調子。この習慣を続けていきましょう。';
-    setMood('character_assets/cat-neutral.png', 'mood-neutral');
+    setMood('neutral');
   }
 
   const historyList = document.getElementById('historyList');
