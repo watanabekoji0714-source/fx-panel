@@ -94,14 +94,28 @@
     if (changed) localStorage.setItem('tradingProjects', JSON.stringify(projects));
   })();
 
+  function selectTab(targetId) {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view-frame').forEach(f => f.classList.remove('active'));
+    const btn = document.querySelector(`.nav-btn[data-target="${targetId}"]`);
+    const frame = document.getElementById(targetId);
+    if (btn) btn.classList.add('active');
+    if (frame) frame.classList.add('active');
+  }
+
   document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.view-frame').forEach(f => f.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(btn.dataset.target).classList.add('active');
-    });
+    btn.addEventListener('click', () => selectTab(btn.dataset.target));
   });
+
+  // URLの#でタブを直接指定して開けるようにする（例：フォーム送信後の確認メッセージから #character で相棒タブへ）
+  const HASH_TAB_MAP = { character: 'frame-character', risk: 'frame-risk', analysis: 'frame-analysis' };
+  function applyHashTab() {
+    const key = (location.hash || '').replace('#', '');
+    const targetId = HASH_TAB_MAP[key];
+    if (targetId) selectTab(targetId);
+  }
+  applyHashTab();
+  window.addEventListener('hashchange', applyHashTab);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
