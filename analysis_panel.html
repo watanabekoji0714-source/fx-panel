@@ -45,6 +45,12 @@
   .pf-neg { color: var(--red); font-weight:600; }
   .table-wrap { overflow-x:auto; }
   .note { font-size:12px; color:var(--sub); margin-top:8px; }
+  .advice-item { display:flex; gap:10px; align-items:flex-start; background:var(--card-bg); border:1px solid var(--border); border-left:4px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; font-size:14px; line-height:1.5; }
+  .advice-item .advice-icon { font-size:18px; flex:0 0 auto; }
+  .advice-strength { border-left-color: var(--green); }
+  .advice-caution { border-left-color: var(--red); }
+  .advice-info { border-left-color: var(--yellow); }
+  .advice-empty { font-size:13px; color:var(--sub); text-align:center; padding:20px; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; }
   footer { margin-top:24px; font-size:12px; color:var(--sub); text-align:center; }
 </style>
 </head>
@@ -115,6 +121,10 @@
 
   <h2 class="section-title">損切りタイプ別（タイプA：セットアップ通りで逆行 ／ タイプB：自分でTP・SLを動かした結果）</h2>
   <div class="table-wrap"><table id="lossTypeTable"><thead><tr><th>タイプ</th><th>件数</th><th>合計損失額</th><th>平均損失額</th></tr></thead><tbody></tbody></table></div>
+
+  <h2 class="section-title">💡 分析に基づくアドバイス</h2>
+  <div id="adviceList"></div>
+  <div class="note">十分なサンプル数（目安5件前後）がある項目のみ表示しています。上の各テーブルはフィルタの影響を受けますが、このアドバイスは常に全期間・全通貨ペアのデータから算出しています。</div>
 
   <footer>Phase2：パフォーマンス分析ダッシュボード（読み取り専用）</footer>
 
@@ -280,6 +290,116 @@ function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
 function fmtPF(x) { if (!isFinite(x)) return '∞'; const cls = x >= 1 ? 'pf-pos' : 'pf-neg'; return `<span class="${cls}">${x.toFixed(2)}</span>`; }
 function fmtYen(x) { return '¥' + Math.round(x).toLocaleString(); }
 
+// ================= 時間帯・チェックリスト定義（表示とアドバイス生成の両方で共有） =================
+const bands = [
+  { label: '0:00〜8:00', test: h => h >= 0 && h < 8 },
+  { label: '8:00〜16:00（東京時間）', test: h => h >= 8 && h < 16 },
+  { label: '16:00〜22:00（欧州時間）', test: h => h >= 16 && h < 22 },
+  { label: '22:00〜24:00（北米時間）', test: h => h >= 22 && h < 24 },
+];
+
+const checklistDefs = [
+  { label: 'H4・H1・M15トレンド一致', ok: r => r[COL.h4] && r[COL.h4]===r[COL.h1] && r[COL.h1]===r[COL.m15] },
+  { label: 'M5トレンド転換', ok: r => /^OK$/i.test((r[COL.m5trend]||'').trim()) },
+  { label: '強いラインが近すぎない', ok: r => /^OK$/i.test((r[COL.strongLine]||'').trim()) },
+  { label: 'RR1.0〜1.2', ok: r => { const v=toNumber(r[COL.rr]); return isNaN(v) ? /^OK$/i.test((r[COL.rr]||'').trim()) : (v>=1.0 && v<=1.2); } },
+  { label: 'チャートを見続けない', ok: r => (r[COL.chartWatch]||'').trim()==='してない' },
+  { label: 'TPを不適切に変更しない', ok: r => (r[COL.tpChange]||'').trim()==='してない' },
+  { label: 'SLを不適切に変更しない', ok: r => (r[COL.slChange]||'').trim()==='してない' },
+];
+
+function computeChecklistStats(rows) {
+  const out = [];
+  checklistDefs.forEach(def => {
+    const withValue = rows.filter(x => {
+      const raw = [x.r[COL.h4], x.r[COL.m5trend], x.r[COL.strongLine], x.r[COL.rr], x.r[COL.chartWatch], x.r[COL.tpChange], x.r[COL.slChange]];
+      return raw.some(v => v !== '' && v != null);
+    });
+    if (!withValue.length) return;
+    const okRows = withValue.filter(x => def.ok(x.r));
+    const ngRows = withValue.filter(x => !def.ok(x.r));
+    const okWinRate = okRows.length ? okRows.filter(x=>x.isWin).length / okRows.length : null;
+    const ngWinRate = ngRows.length ? ngRows.filter(x=>x.isWin).length / ngRows.length : null;
+    out.push({ label: def.label, n: withValue.length, okN: okRows.length, ngN: ngRows.length, okRate: okRows.length / withValue.length, okWinRate, ngWinRate });
+  });
+  return out;
+}
+
+function computeTimeBandStats(rows) {
+  const withTime = rows.filter(x => x.dInfo.hour !== null);
+  const timeMap = {};
+  bands.forEach(b => timeMap[b.label] = newBucket());
+  withTime.forEach(x => { const band = bands.find(b => b.test(x.dInfo.hour)); if (band) addToBucket(timeMap[band.label], x.pnl, x.isWin); });
+  return bands.map(b => ({ label: b.label, stats: bucketStats(timeMap[b.label]) })).filter(x => x.stats.count > 0);
+}
+
+// ================= アドバイス生成（常に全期間・全通貨ペアのデータから算出） =================
+function renderAdvice(pairMap, checklistStats, timeStats, typeMap, totalCount) {
+  const container = document.getElementById('adviceList');
+  const MIN_N = 5;
+  const items = [];
+
+  // 1) 最も成績に効いているルール
+  const ruleCandidates = checklistStats.filter(s => s.okN >= 3 && s.ngN >= 3 && s.okWinRate !== null && s.ngWinRate !== null);
+  if (ruleCandidates.length) {
+    const best = ruleCandidates.reduce((a, b) => (b.okWinRate - b.ngWinRate) > (a.okWinRate - a.ngWinRate) ? b : a);
+    const gap = best.okWinRate - best.ngWinRate;
+    if (gap >= 0.15) {
+      items.push({ type: 'strength', icon: '✅', text: `「${best.label}」を守れた時の勝率は${fmtPct(best.okWinRate)}、守れなかった時は${fmtPct(best.ngWinRate)}。このルールの徹底が成績に直結しています。` });
+    }
+  }
+
+  // 2) 勝率にほとんど差が出ていないルール（見直し候補）
+  const weakCandidates = checklistStats.filter(s => s.okN >= 5 && s.ngN >= 5 && s.okWinRate !== null && s.ngWinRate !== null);
+  if (weakCandidates.length) {
+    const weakest = weakCandidates.reduce((a, b) => Math.abs(b.okWinRate - b.ngWinRate) < Math.abs(a.okWinRate - a.ngWinRate) ? b : a);
+    const gap = Math.abs(weakest.okWinRate - weakest.ngWinRate);
+    if (gap <= 0.05) {
+      items.push({ type: 'info', icon: '🔍', text: `「${weakest.label}」は守れた時（${fmtPct(weakest.okWinRate)}）と守れなかった時（${fmtPct(weakest.ngWinRate)}）で勝率にほとんど差がありません。ルールの内容自体を見直す余地があるかもしれません。` });
+    }
+  }
+
+  // 3) 得意・苦手な通貨ペア
+  const pairEntries = Object.entries(pairMap).map(([k, b]) => [k, bucketStats(b)]).filter(([, s]) => s.count >= MIN_N);
+  if (pairEntries.length >= 2) {
+    const sorted = [...pairEntries].sort((a, b) => b[1].winRate - a[1].winRate);
+    const [bestPair, bestStats] = sorted[0];
+    const [worstPair, worstStats] = sorted[sorted.length - 1];
+    if (bestStats.winRate - worstStats.winRate >= 0.15) {
+      items.push({ type: 'strength', icon: '💹', text: `${bestPair}の勝率は${fmtPct(bestStats.winRate)}と好調です。一方${worstPair}は${fmtPct(worstStats.winRate)}にとどまっています。得意な通貨ペアに絞ることも選択肢です。` });
+    }
+  }
+
+  // 4) 得意・苦手な時間帯
+  const timeEntries = timeStats.filter(t => t.stats.count >= MIN_N);
+  if (timeEntries.length >= 2) {
+    const sorted = [...timeEntries].sort((a, b) => b.stats.winRate - a.stats.winRate);
+    const best = sorted[0]; const worst = sorted[sorted.length - 1];
+    if (best.stats.winRate - worst.stats.winRate >= 0.15) {
+      items.push({ type: 'strength', icon: '⏰', text: `${best.label}の勝率は${fmtPct(best.stats.winRate)}。${worst.label}は${fmtPct(worst.stats.winRate)}と振るいません。得意な時間帯を意識してみましょう。` });
+    }
+  }
+
+  // 5) タイプB（自分でTP/SLを動かした損切り）の影響
+  const typeA = typeMap['タイプA']; const typeB = typeMap['タイプB'];
+  if (typeB && typeB.count >= 3) {
+    const avgA = typeA && typeA.count ? typeA.sumLoss / typeA.count : 0;
+    const avgB = typeB.sumLoss / typeB.count;
+    if (typeA && typeA.count && avgB > avgA * 1.2) {
+      items.push({ type: 'caution', icon: '⚠️', text: `自分でTP/SLを動かした損切り（タイプB、${typeB.count}件）の平均損失は${fmtYen(avgB)}で、セットアップ通りの損切り（タイプA）の平均${fmtYen(avgA)}より大きくなっています。ルール通りの損切りを徹底しましょう。` });
+    } else if (typeB.count >= totalCount * 0.2) {
+      items.push({ type: 'caution', icon: '⚠️', text: `損切りのうちタイプB（自分でTP/SLを動かした結果）が${typeB.count}件あります。まずはルール通りの損切り（タイプA）を増やすことを意識しましょう。` });
+    }
+  }
+
+  if (!items.length) {
+    container.innerHTML = '<div class="advice-empty">データが十分に蓄積されると、ここに分析結果に基づいたアドバイスが表示されます。</div>';
+    return;
+  }
+
+  container.innerHTML = items.map(it => `<div class="advice-item advice-${it.type}"><span class="advice-icon">${it.icon}</span><span>${escapeHtml(it.text)}</span></div>`).join('');
+}
+
 // ================= メイン =================
 async function loadData() {
   const active = getProjectById(getActiveProjectId());
@@ -371,12 +491,6 @@ function render(rows, project) {
   const selectedMonth = monthFilterEl.value;
   const rowsAfterMonth = selectedMonth === 'all' ? rowsAfterPair : rowsAfterPair.filter(x => monthKeyOf(x) === selectedMonth);
 
-  const bands = [
-    { label: '0:00〜8:00', test: h => h >= 0 && h < 8 },
-    { label: '8:00〜16:00（東京時間）', test: h => h >= 8 && h < 16 },
-    { label: '16:00〜22:00（欧州時間）', test: h => h >= 16 && h < 22 },
-    { label: '22:00〜24:00（北米時間）', test: h => h >= 22 && h < 24 },
-  ];
   const withTime = rowsAfterMonth.filter(x => x.dInfo.hour !== null);
   const timeNote = document.getElementById('timeNote');
   const timeFilterEl = document.getElementById('timeFilter');
@@ -406,31 +520,12 @@ function render(rows, project) {
   const parsedRows = (selectedTimeBand === 'all' || !withTime.length) ? rowsAfterMonth
     : rowsAfterMonth.filter(x => { if (x.dInfo.hour === null) return false; const band = bands.find(b => b.test(x.dInfo.hour)); return band && band.label === selectedTimeBand; });
 
-  const checklistDefs = [
-    { label: 'H4・H1・M15トレンド一致', ok: r => r[COL.h4] && r[COL.h4]===r[COL.h1] && r[COL.h1]===r[COL.m15] },
-    { label: 'M5トレンド転換', ok: r => /^OK$/i.test((r[COL.m5trend]||'').trim()) },
-    { label: '強いラインが近すぎない', ok: r => /^OK$/i.test((r[COL.strongLine]||'').trim()) },
-    { label: 'RR1.0〜1.2', ok: r => { const v=toNumber(r[COL.rr]); return isNaN(v) ? /^OK$/i.test((r[COL.rr]||'').trim()) : (v>=1.0 && v<=1.2); } },
-    { label: 'チャートを見続けない', ok: r => (r[COL.chartWatch]||'').trim()==='してない' },
-    { label: 'TPを不適切に変更しない', ok: r => (r[COL.tpChange]||'').trim()==='してない' },
-    { label: 'SLを不適切に変更しない', ok: r => (r[COL.slChange]||'').trim()==='してない' },
-  ];
-  const clRows = [];
-  checklistDefs.forEach(def => {
-    const withValue = parsedRows.filter(x => {
-      const raw = [x.r[COL.h4], x.r[COL.m5trend], x.r[COL.strongLine], x.r[COL.rr], x.r[COL.chartWatch], x.r[COL.tpChange], x.r[COL.slChange]];
-      return raw.some(v => v !== '' && v != null);
-    });
-    if (!withValue.length) return;
-    const okRows = withValue.filter(x => def.ok(x.r));
-    const ngRows = withValue.filter(x => !def.ok(x.r));
-    const okWinRate = okRows.length ? okRows.filter(x=>x.isWin).length / okRows.length : null;
-    const ngWinRate = ngRows.length ? ngRows.filter(x=>x.isWin).length / ngRows.length : null;
-    clRows.push([def.label, withValue.length, fmtPct(okRows.length / withValue.length),
-      okWinRate === null ? '–' : fmtPct(okWinRate) + ` (n=${okRows.length})`,
-      ngWinRate === null ? '–' : fmtPct(ngWinRate) + ` (n=${ngRows.length})`]);
-  });
-  fillRawTable('checklistTable', clRows);
+  const checklistStats = computeChecklistStats(parsedRows);
+  fillRawTable('checklistTable', checklistStats.map(s => [
+    s.label, s.n, fmtPct(s.okRate),
+    s.okWinRate === null ? '–' : fmtPct(s.okWinRate) + ` (n=${s.okN})`,
+    s.ngWinRate === null ? '–' : fmtPct(s.ngWinRate) + ` (n=${s.ngN})`,
+  ]));
 
   const typeMap = { 'タイプA': newBucket(), 'タイプB': newBucket() };
   parsedRows.forEach(x => {
@@ -438,6 +533,16 @@ function render(rows, project) {
     if (t === 'タイプA' || t === 'タイプB') { typeMap[t].count++; if (x.pnl < 0) typeMap[t].sumLoss += Math.abs(x.pnl); }
   });
   fillRawTable('lossTypeTable', Object.entries(typeMap).map(([k,b]) => [k, b.count, fmtYen(b.sumLoss), b.count ? fmtYen(b.sumLoss / b.count) : '–']));
+
+  // アドバイスは表示中のフィルタに関係なく、常に全期間・全通貨ペアのデータから算出する
+  const checklistStatsAll = computeChecklistStats(parsedRowsAll);
+  const timeStatsAll = computeTimeBandStats(parsedRowsAll);
+  const typeMapAll = { 'タイプA': newBucket(), 'タイプB': newBucket() };
+  parsedRowsAll.forEach(x => {
+    const t = (x.r[COL.lossType] || '').trim();
+    if (t === 'タイプA' || t === 'タイプB') { typeMapAll[t].count++; if (x.pnl < 0) typeMapAll[t].sumLoss += Math.abs(x.pnl); }
+  });
+  renderAdvice(pairMap, checklistStatsAll, timeStatsAll, typeMapAll, parsedRowsAll.length);
 }
 
 function fillTable(tableId, entries, rowFn) {
