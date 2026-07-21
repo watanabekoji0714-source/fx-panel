@@ -78,18 +78,30 @@
   </div>
 
 <script>
-  // 既存インストール向けの補完：formUrl項目の追加前からプロジェクトを使っていた場合、
-  // Fundoraのフォームだけ自動で埋める（他のプロジェクトのデータには触れない）
-  (function backfillFundoraFormUrl() {
-    const FUNDORA_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSefmLDGLfYRskTeB6rA_piFhgitZMQMWjlvVVWqObdLI3G_-Q/viewform?usp=header';
+  // 既存インストール向けの補完：新しい項目やURLを追加した後に、
+  // 該当プロジェクトがまだ未設定（空）の場合だけ自動で埋める（他の値は上書きしない）
+  (function backfillProjectDefaults() {
+    // name: プロジェクト名で一致させる／各キーは「今空なら」だけ埋める値
+    const BACKFILLS = [
+      {
+        name: 'Fundora マスタープラン',
+        formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSefmLDGLfYRskTeB6rA_piFhgitZMQMWjlvVVWqObdLI3G_-Q/viewform?usp=header',
+      },
+      {
+        name: 'Fintokei クオーツプラン',
+        sheetUrl: 'https://docs.google.com/spreadsheets/d/155JRCckwLPoI2_nWujuG8v6sfkAb2uQ-BOTl-bVySvw/edit?gid=980747558#gid=980747558',
+      },
+    ];
     let projects = [];
     try { projects = JSON.parse(localStorage.getItem('tradingProjects') || '[]'); } catch (e) { return; }
     let changed = false;
     projects.forEach(p => {
-      if (p.name === 'Fundora マスタープラン' && !p.formUrl) {
-        p.formUrl = FUNDORA_FORM_URL;
-        changed = true;
-      }
+      const fill = BACKFILLS.find(b => b.name === p.name);
+      if (!fill) return;
+      Object.keys(fill).forEach(key => {
+        if (key === 'name') return;
+        if (!p[key]) { p[key] = fill[key]; changed = true; }
+      });
     });
     if (changed) localStorage.setItem('tradingProjects', JSON.stringify(projects));
   })();
