@@ -1,13 +1,14 @@
 // FXトレード管理パネル - Service Worker
 // ネットワーク優先（常に最新版を取りに行き、失敗した時だけキャッシュを使う）。
 // 更新のたびにキャッシュが古くなって困る、という事態を避けるための方針。
-const CACHE_NAME = 'fx-panel-v1';
+const CACHE_NAME = 'fx-panel-v2';
 const APP_SHELL = [
   './',
   './index.html',
   './risk_panel.html',
   './analysis_panel.html',
   './character_panel.html',
+  './common.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

@@ -109,21 +109,9 @@
 
   <footer>ポイントは損益ではなく「ルール遵守数」から計算しています。全プロジェクト共通の相棒です。</footer>
 
+<script src="common.js"></script>
 <script>
-// ================= プロジェクト管理（共通仕様・読み取りのみ使用） =================
-const PROJECTS_KEY = 'tradingProjects';
-
-function loadProjects() {
-  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch (e) { return []; }
-}
-
-// ================= 汎用ユーティリティ =================
-function toNumber(v) {
-  if (v == null) return NaN;
-  const cleaned = String(v).replace(/[¥,%\s]/g, '');
-  const n = parseFloat(cleaned);
-  return isNaN(n) ? NaN : n;
-}
+// ================= 日付ユーティリティ（character_panel固有：hour情報を扱わない簡易版） =================
 function parseDateInfo(v) {
   if (!v) return null;
   const s = String(v).trim();
@@ -134,37 +122,6 @@ function parseDateInfo(v) {
   const d = new Date(s);
   if (!isNaN(d.getTime())) return { date: new Date(d.getFullYear(), d.getMonth(), d.getDate()) };
   return null;
-}
-function parseSheetUrl(input) {
-  const idMatch = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  const gidMatch = input.match(/[?#&]gid=(\d+)/);
-  if (!idMatch) return null;
-  return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
-}
-function loadViaJSONP(sheetId, gid) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'gvizCallback_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    let done = false;
-    const script = document.createElement('script');
-    function cleanup() { delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
-    window[cbName] = function (response) {
-      if (done) return; done = true; cleanup();
-      try {
-        if (!response || !response.table || !response.table.rows) { reject(new Error('形式エラー')); return; }
-        const rows = response.table.rows.map(r => (r.c || []).map(cell => {
-          if (!cell) return '';
-          if (cell.f !== undefined && cell.f !== null) return cell.f;
-          if (cell.v !== undefined && cell.v !== null) return cell.v;
-          return '';
-        }));
-        resolve(rows);
-      } catch (e) { reject(e); }
-    };
-    const timer = setTimeout(() => { if (done) return; done = true; cleanup(); reject(new Error('タイムアウト')); }, 12000);
-    script.onerror = function () { if (done) return; done = true; cleanup(); reject(new Error('読み込み失敗')); };
-    script.src = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/gviz/tq?gid=' + gid + '&tqx=responseHandler:' + cbName;
-    document.head.appendChild(script);
-  });
 }
 
 const COL = { date: 0, pair: 1, ruleCount: 18, lossType: 22 };
@@ -353,37 +310,10 @@ function render(combined) {
   }
 }
 
-function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('reloadBtn').addEventListener('click', loadData);
   loadData();
 });
-
-// ================= フリックでタブ切り替え（親のindex.htmlに通知） =================
-(function () {
-  let startX = 0, startY = 0, tracking = false;
-  const THRESHOLD = 60;
-  document.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    tracking = true;
-  }, { passive: true });
-  document.addEventListener('touchend', (e) => {
-    if (!tracking) return;
-    tracking = false;
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-    const dx = touch.clientX - startX;
-    const dy = touch.clientY - startY;
-    if (Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      try {
-        window.parent.postMessage({ source: 'fxpanel', type: 'swipe', direction: dx < 0 ? 'left' : 'right' }, window.location.origin);
-      } catch (e) {}
-    }
-  }, { passive: true });
-})();
 </script>
 </body>
 </html>
