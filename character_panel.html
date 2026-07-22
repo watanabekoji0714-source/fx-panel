@@ -312,6 +312,7 @@ function render(combined) {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('reloadBtn').addEventListener('click', loadData);
+  onProjectsChanged(loadData);
   loadData();
 });
 </script>

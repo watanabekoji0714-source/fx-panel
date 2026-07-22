@@ -454,6 +454,7 @@ window.addEventListener('DOMContentLoaded', () => {
   migrateLegacyIfNeeded();
   refreshProjectSelect();
   refreshProjectList();
+  onProjectsChanged(() => { refreshProjectSelect(); refreshProjectList(); loadData(); });
 
   document.getElementById('projectSelect').addEventListener('change', (e) => {
     setActiveProjectId(e.target.value);

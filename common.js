@@ -79,6 +79,17 @@ function refreshProjectList() {
   });
 }
 
+// index.htmlのiframe構成では risk_panel / analysis_panel / character_panel が
+// それぞれ独立したdocumentとして読み込まれたままタブ切り替え（表示/非表示）されるだけなので、
+// あるiframeでlocalStorageを更新しても他のiframeは自動では気づかない。
+// 同一オリジンのstorageイベントは「変更を行った側以外」の全windowで発火するため、
+// これを使って他タブの選択状態・プロジェクト一覧を同期する。
+function onProjectsChanged(callback) {
+  window.addEventListener('storage', (e) => {
+    if (!e.key || e.key === PROJECTS_KEY || e.key === ACTIVE_PROJECT_KEY) callback();
+  });
+}
+
 // ================= 汎用ユーティリティ =================
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
